@@ -1,0 +1,140 @@
+@import 'tailwindcss';
+
+/* Layout variants. They're emitted in this order, so later ones win: the small
+   screen rules must stay last. `phone` matches ui/common/useIsPhone.ts. */
+@custom-variant wide (@media (min-width: 1500px));
+@custom-variant medium (@media (max-width: 1100px));
+@custom-variant short (@media (max-height: 650px) and (min-width: 761px));
+@custom-variant low (@media (max-height: 650px));
+/* Small screens in either orientation: phones held sideways are short, not narrow. */
+@custom-variant compact {
+  @media (max-width: 760px), (max-height: 500px) {
+    @slot;
+  }
+}
+/* Upright phones, where the controls become a bottom sheet. */
+@custom-variant phone (@media (max-width: 760px));
+
+@theme {
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  --color-page: #10151e;
+  --color-panel: #171e29;
+  --color-line: #2c3544;
+  --color-muted: #9caabc;
+  --color-ink: #eef4f9;
+  --color-accent: #7fe3d9;
+  --color-control: #202937;
+  --color-control-hover: #344454;
+
+  /* Sizes are named in px and leave line height alone. */
+  --text-*: initial;
+  --text-9: 9px;
+  --text-10: 10px;
+  --text-11: 11px;
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-15: 15px;
+  --text-16: 16px;
+  --text-17: 17px;
+  --text-18: 18px;
+  --text-19: 19px;
+  --text-20: 20px;
+  --text-21: 21px;
+  --text-22: 22px;
+  --text-24: 24px;
+  --text-26: 26px;
+  --text-30: 30px;
+  --text-38: 38px;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    line-height: normal;
+    --header-height: 72px;
+  }
+  body {
+    overflow: hidden;
+    background: var(--color-page);
+    color: var(--color-ink);
+  }
+
+  button,
+  select,
+  input[type='number'] {
+    border: 1px solid var(--color-line);
+    border-radius: 7px;
+    color: var(--color-ink);
+    background: var(--color-control);
+  }
+  button {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+  button:hover {
+    background: var(--color-control-hover);
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  label {
+    display: block;
+    margin: 14px 0 8px;
+    font-size: 14px;
+    color: #cad5e3;
+  }
+  select {
+    width: 100%;
+    min-height: 40px;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+  input[type='number'] {
+    width: 100%;
+    padding: 9px 10px;
+  }
+  input[type='range'] {
+    width: 100%;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--color-accent);
+  }
+
+  @variant compact {
+    :root {
+      --header-height: calc(60px + env(safe-area-inset-top));
+    }
+
+    /* Touch targets */
+    button,
+    select,
+    input[type='number'] {
+      min-height: 44px;
+    }
+    /* iOS zooms the page when focusing anything smaller than 16 px. */
+    select,
+    input[type='number'] {
+      font-size: 16px;
+    }
+    input[type='range'] {
+      height: 32px;
+    }
+  }
+}
