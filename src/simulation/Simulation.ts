@@ -26,6 +26,9 @@ import type { TargetMode } from './targets';
 /** Fixed simulation step: 120 Hz, independent of the frame rate. */
 export const DT = 1 / 120;
 
+/** Default limit of both joints, in degrees. */
+export const DEFAULT_LIMIT = 30;
+
 /** Time constant of the camera target's smoothing, in s. */
 const CAMERA_SMOOTHING = 0.12;
 
@@ -79,12 +82,12 @@ export interface SimulationState {
 
 export class Simulation {
   readonly config: KinematicConfig = {
-    z12: 60,
-    z23: 100,
+    z12: 22,
+    z23: 37,
     spacing: DEFAULT_SPACING,
     limits: [
-      [-Math.PI / 2, Math.PI / 2],
-      [-Math.PI / 2, Math.PI / 2],
+      [-DEFAULT_LIMIT * RAD, DEFAULT_LIMIT * RAD],
+      [-DEFAULT_LIMIT * RAD, DEFAULT_LIMIT * RAD],
     ],
     policy: 'clamp',
   };

@@ -95,7 +95,7 @@ export function ModelPanel() {
         <LengthField name="z23" label="z₂₃" />
       </div>
       <Hint size="small">
-        Longitudes iniciales de MATLAB; pendientes de medir entre los orígenes del mecanismo.
+        Alturas de la ficha técnica: 22 mm de la base al pivote y 37 mm del pivote a la placa.
       </Hint>
       <RangeField
         id="limit"

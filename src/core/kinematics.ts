@@ -121,11 +121,14 @@ export function angularError(pose: Pose, target: Vec3): number | null {
   return n < 1e-8 ? null : (Math.acos(clamp(dot(pose.direction, d) / n, -1, 1)) * 180) / Math.PI;
 }
 
+/** Minimum clearance between plates in requirement R5, in mm. */
+const CLEARANCE = 2;
+
 /**
  * Smallest base spacing that keeps plates from crossing at any angle.
- * Conservative bound for the plate around its fixed pivot, plus a 10 mm margin
- * between envelopes. It says nothing about hardware clearance.
+ * Conservative bound for the plate around its fixed pivot, plus the required
+ * clearance. Shafts, servos and cables aren't part of it.
  */
 export function safeSpacing(z23: number) {
-  return Math.ceil(2 * Math.hypot(z23 + PLATE_TOP, PLATE_RADIUS) + 10);
+  return Math.ceil(2 * Math.hypot(z23 + PLATE_TOP, PLATE_RADIUS) + CLEARANCE);
 }

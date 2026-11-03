@@ -81,7 +81,9 @@ exception is the filters' default settings, which now follow the filters session
 so settings counted in samples are converted to keep the same duration. CSV
 exports therefore differ from the original's for those filters, unless their
 settings are changed back. The plate size also differs: it now matches
-`module.step` and drawing `Sofia003-E001-04_2`, and the default spacing is 150 mm.
+`module.step` and drawing `Sofia003-E001-04_2`. The default spacing is 150 mm, and
+`z12 = 22` and `z23 = 37` come from the technical specification instead of the
+MATLAB values of 60 and 100.
 The USB link wasn't ported, so that HTML and
 `SOFIA_Tracking.ino` remain the way to drive the bench servos for now.
 

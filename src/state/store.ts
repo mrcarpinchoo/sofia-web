@@ -13,6 +13,7 @@ import type { Framing } from '../perception/gestures';
 import { PageRecorder } from '../recording/pageRecorder';
 import type { ViewName } from '../scene/SofiaScene';
 import { LabEngine } from '../simulation/LabEngine';
+import { DEFAULT_LIMIT } from '../simulation/Simulation';
 import type { TargetMode } from '../simulation/targets';
 
 export type ControlTab = 'target' | 'response' | 'model' | 'camera' | 'link';
@@ -121,9 +122,9 @@ export const useLab = create<LabStore>()((set, get) => ({
   filterParams: { ...DEFAULT_FILTER_PARAMS },
   ideal: false,
   spacing: DEFAULT_SPACING,
-  z12: 60,
-  z23: 100,
-  limit: 90,
+  z12: 22,
+  z23: 37,
+  limit: DEFAULT_LIMIT,
   policy: 'clamp',
   rays: true,
   selected: 7,

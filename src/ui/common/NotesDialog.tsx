@@ -77,8 +77,7 @@ export function NotesDialog() {
         Representación esquemática, no importación CAD. El hexágono mide 120 mm entre vértices (103.92
         mm entre caras) y 5 mm de espesor, según module.step y el plano Sofia003-E001-04_2. Separación
         inicial de bases: 150 mm, ajustable entre 120 y 500 mm.
-        Las longitudes 60 y 100 mm proceden del código MATLAB y son editables; requieren validación
-        física. El rango ±90° es una hipótesis ajustable, no una calibración del servo.
+        Las longitudes z₁₂ = 22 mm y z₂₃ = 37 mm son las alturas de la ficha técnica y son editables. El rango inicial de ±30° es ajustable hasta ±90° y no es una calibración del servo.
       </p>
       <p>
         Se limitan ángulos; no se simulan torque, consumo ni dinámica real del MG90S. Las colisiones
@@ -89,10 +88,10 @@ export function NotesDialog() {
       </p>
       <h3>Separación conservadora</h3>
       <p>
-        La recomendación usa d ≥ 2√((z₂₃ + 4.3)² + 60²) + 10 mm, redondeada hacia arriba.
+        La recomendación usa d ≥ 2√((z₂₃ + 4.3)² + 60²) + 2 mm, redondeada hacia arriba.
         Cada placa queda dentro de una esfera alrededor de su pivote; separar estas envolventes evita
-        cruces entre placas para cualquier ángulo del modelo. Los 10 mm son un margen elegido para la
-        simulación, no una cota de los documentos. Con z₂₃ = 100 mm, la recomendación es 251 mm. No
+        cruces entre placas para cualquier ángulo del modelo. Los 2 mm son la holgura mínima del
+        requisito R5. Con z₂₃ = 37 mm, la recomendación es 148 mm. No
         certifica holguras de servos, cables ni soportes. Si cambias z₂₃, revisa y vuelve a aplicar
         la recomendación.
       </p>
