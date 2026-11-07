@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { engine, useLab } from './state/store';
+import { engine, logEvent, useLab } from './state/store';
 import { NotesDialog } from './ui/common/NotesDialog';
 import { Toast } from './ui/common/Toast';
 import { Header } from './ui/layout/Header';
@@ -22,7 +22,16 @@ export function App() {
       engine.camera.stop(false);
     }
     function hidePage() {
-      if (document.hidden && useLab.getState().cameraActivity !== 'off') engine.camera.stop();
+      if (document.hidden && useLab.getState().cameraActivity !== 'off') {
+        engine.camera.stop();
+        logEvent({
+          level: 'AVISO',
+          source: 'gui',
+          name: 'DETECCION_FINALIZADA',
+          detail: 'la pestaña quedó oculta',
+          action: 'cámara apagada; el panal conserva la pose. Pulsa Activar cámara al volver',
+        });
+      }
     }
     document.addEventListener('keydown', togglePause);
     document.addEventListener('visibilitychange', hidePage);

@@ -8,6 +8,7 @@ const START_LABELS: Record<CameraActivity, string> = {
   off: 'Activar cámara',
   loading: 'Cargando…',
   running: 'Cámara activa',
+  reconnecting: 'Reconectando…',
 };
 
 export function CameraPanel() {

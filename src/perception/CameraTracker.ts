@@ -1,15 +1,21 @@
 // Runs MediaPipe's hand landmarker on the webcam, recognises sofia-tracker's
 // gestures and reports them through callbacks. Images are processed
 // locally; nothing leaves the browser.
+//
+// If the camera ends while running (unplugged, taken by another program),
+// it is requested again every 2 s ('reconnecting') with the model kept
+// loaded, like sofia-tracker's DetectionWorker. A camera that can't be
+// opened at start() is an error instead.
 
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import type { TrackerGesture } from '../core/choreography';
 import type { Vec2 } from '../core/types';
+import type { EventLevel } from '../diagnostics/eventLog';
 import { GESTURES } from './gestures';
 import type { Landmark } from './gestures';
 import { GestureRecognizer } from './handRecognizer';
 
-export type CameraActivity = 'off' | 'loading' | 'running';
+export type CameraActivity = 'off' | 'loading' | 'running' | 'reconnecting';
 
 type HandResult = ReturnType<HandLandmarker['detectForVideo']>;
 
@@ -19,7 +25,12 @@ export interface CameraCallbacks {
   /** Smoothed palm centroid, 0-1 in the mirrored image, or null without a hand. */
   onHand: (point: Vec2 | null, time: number) => void;
   onGesture: (name: TrackerGesture, time: number) => void;
+  /** Errors and recoveries, for the event log. */
+  onEvent: (level: EventLevel, name: string, detail: string, action: string) => void;
 }
+
+const RETRY_MS = 2000;
+const VIDEO = { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } };
 
 // Served from public/, see scripts/fetch-assets.mjs. The same model as sofia-tracker.
 const ASSETS = `${import.meta.env.BASE_URL}mediapipe`;
@@ -60,6 +71,7 @@ export class CameraTracker {
   private task: HandLandmarker | null = null;
   private frameId = 0;
   private lastFrame = -1;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(callbacks: CameraCallbacks) {
     this.callbacks = callbacks;
@@ -95,25 +107,12 @@ export class CameraTracker {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('El navegador no permite cámara aquí. Abre la página con HTTPS o localhost.');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO, audio: false });
       if (session !== this.epoch) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
-      this.stream = stream;
-      video.srcObject = stream;
-      stream.getVideoTracks().forEach((track) => {
-        track.onended = () => {
-          if (session === this.epoch) {
-            this.stop(false);
-            onStatus('La cámara se desconectó. Vuelve a activarla.');
-          }
-        };
-      });
-      await timeout(video.play(), 12000);
+      await this.useStream(stream, session);
       if (session !== this.epoch) return;
 
       onStatus('Cargando el modelo de manos…');
@@ -131,14 +130,95 @@ export class CameraTracker {
       if (session !== this.epoch) return;
       this.stop(false);
       const { name, message } = error as Error;
-      onStatus(CAMERA_ERRORS[name] ?? `No se pudo iniciar la detección. ${message} Vuelve a intentarlo.`);
+      const text = CAMERA_ERRORS[name] ?? `No se pudo iniciar la detección. ${message} Vuelve a intentarlo.`;
+      onStatus(text);
+      const camera = name in CAMERA_ERRORS || !navigator.mediaDevices?.getUserMedia;
+      this.callbacks.onEvent(
+        'ERROR',
+        camera ? 'CAMARA_NO_DISPONIBLE' : 'ERROR_DETECCION',
+        `${name}: ${message}`,
+        camera
+          ? 'detección detenida; revisar el permiso o la cámara y pulsar Activar cámara'
+          : 'detección detenida y cámara liberada; pulsar Activar cámara',
+      );
     }
   }
 
-  stop(announce = true) {
-    this.epoch++;
+  private async useStream(stream: MediaStream, session: number) {
+    const video = this.video;
+    if (!video) return;
+    this.stream = stream;
+    video.srcObject = stream;
+    stream.getVideoTracks().forEach((track) => {
+      track.onended = () => {
+        if (session === this.epoch) this.lose(session);
+      };
+    });
+    await timeout(video.play(), 12000);
+  }
+
+  /** The camera ended while running: request it again every RETRY_MS. */
+  private lose(session: number) {
+    const { onActive, onEvent, onHand, onStatus } = this.callbacks;
+    if (!this.running) {
+      // Ended while the model was loading: a failed start
+      this.stop(false);
+      onStatus('La cámara se desconectó. Vuelve a activarla.');
+      onEvent('ERROR', 'CAMARA_NO_DISPONIBLE', 'la pista de video terminó al iniciar', 'pulsar Activar cámara');
+      return;
+    }
     this.running = false;
     cancelAnimationFrame(this.frameId);
+    this.releaseStream();
+    this.draw([]);
+    this.recognizer.reset();
+    onHand(null, performance.now());
+    onActive('reconnecting');
+    onStatus('La cámara se desconectó. Reintentando cada 2 s…');
+    onEvent('ERROR', 'CAMARA_PERDIDA', 'la pista de video terminó', `se pide la cámara de nuevo cada ${RETRY_MS / 1000} s`);
+
+    const lostAt = performance.now();
+    let attempts = 0;
+    const retry = async () => {
+      this.retryTimer = null;
+      if (session !== this.epoch) return;
+      attempts++;
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO, audio: false });
+      } catch {
+        if (session === this.epoch) this.retryTimer = setTimeout(retry, RETRY_MS);
+        return;
+      }
+      if (session !== this.epoch) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      try {
+        await this.useStream(stream, session);
+      } catch {
+        this.releaseStream();
+        if (session === this.epoch) this.retryTimer = setTimeout(retry, RETRY_MS);
+        return;
+      }
+      if (session !== this.epoch || !this.task) return;
+      this.running = true;
+      this.lastFrame = -1;
+      this.recognizer.reset(); // the hand moved while the camera was gone
+      onActive('running');
+      onStatus('Cámara recuperada. Muestra una mano a la cámara.');
+      onEvent(
+        'INFO',
+        'CAMARA_RECUPERADA',
+        `cámara reabierta tras ${((performance.now() - lostAt) / 1000).toFixed(1)} s (${attempts} intentos)`,
+        'se reanuda la detección con el historial de gestos reiniciado',
+      );
+      this.loop(session);
+    };
+    this.retryTimer = setTimeout(retry, RETRY_MS);
+  }
+
+  private releaseStream() {
     const stream = this.stream;
     this.stream = null;
     stream?.getTracks().forEach((t) => {
@@ -149,6 +229,15 @@ export class CameraTracker {
       this.video.pause();
       this.video.srcObject = null;
     }
+  }
+
+  stop(announce = true) {
+    this.epoch++;
+    this.running = false;
+    cancelAnimationFrame(this.frameId);
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.releaseStream();
     this.task?.close();
     this.task = null;
     if (this.overlay) {
@@ -210,8 +299,13 @@ export class CameraTracker {
         this.process(this.task.detectForVideo(video, now), now);
       } catch (error) {
         this.stop(false);
-        this.callbacks.onStatus(
-          `La detección se detuvo: ${(error as Error).message}. Puedes volver a activar la cámara.`,
+        const { message } = error as Error;
+        this.callbacks.onStatus(`La detección se detuvo: ${message}. Puedes volver a activar la cámara.`);
+        this.callbacks.onEvent(
+          'ERROR',
+          'ERROR_DETECCION',
+          message,
+          'detección detenida y cámara liberada; pulsar Activar cámara',
         );
         return;
       }

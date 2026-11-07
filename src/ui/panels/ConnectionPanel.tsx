@@ -23,6 +23,7 @@ const STATE_LABELS: Record<LinkState, string> = {
   connecting: 'Conectando…',
   online: 'En línea',
   unresponsive: 'Sin respuesta',
+  reconnecting: 'Reconectando…',
 };
 
 const MODE_LABELS: Record<MaestroMode, string> = {
@@ -122,6 +123,8 @@ export function ConnectionPanel() {
   const stop = useLab((s) => s.stopPanel);
   const off = useLab((s) => s.offPanel);
   const playGesture = useLab((s) => s.playGesture);
+  const eventCount = useLab((s) => s.eventCount);
+  const downloadEvents = useLab((s) => s.downloadEvents);
 
   const { state, status } = link;
   const linked = state !== 'disconnected';
@@ -169,7 +172,7 @@ export function ConnectionPanel() {
             className={
               state === 'online'
                 ? 'text-accent'
-                : state === 'unresponsive'
+                : state === 'unresponsive' || state === 'reconnecting'
                   ? 'text-[#ffbd88]'
                   : undefined
             }
@@ -241,6 +244,16 @@ export function ConnectionPanel() {
           </Hint>
         </>
       )}
+
+      <div className="mt-4.5 flex items-center justify-between gap-3 text-13">
+        <span className="text-muted">Registro de eventos: {eventCount}</span>
+        <button className="text-13" onClick={downloadEvents}>
+          Descargar CSV
+        </button>
+      </div>
+      <Hint size="small">
+        Gestos, comandos, errores y recuperaciones de esta sesión, con el estado en cada momento.
+      </Hint>
     </Section>
   );
 }

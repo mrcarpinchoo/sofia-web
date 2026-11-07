@@ -12,6 +12,7 @@ import type { LimitPolicy } from '../core/types';
 import { CameraTracker } from '../perception/CameraTracker';
 import type { CameraActivity } from '../perception/CameraTracker';
 import type { TrackerGesture } from '../core/choreography';
+import type { LabEvent } from '../diagnostics/eventLog';
 import type { Vec2 } from '../core/types';
 import { GESTURES } from '../perception/gestures';
 import { SofiaScene } from '../scene/SofiaScene';
@@ -49,6 +50,8 @@ export interface EngineEvents {
   onGesture: (name: TrackerGesture) => void;
   /** The hand's position, 0-1 in the mirrored image, or null when lost. */
   onHand: (point: Vec2 | null) => void;
+  /** Camera errors and recoveries, for the event log. */
+  onEvent: (event: LabEvent) => void;
 }
 
 const NO_GESTURE = 'Esperando un gesto.';
@@ -77,6 +80,8 @@ export class LabEngine {
       onActive: (activity) => this.cameraActivity(activity),
       onHand: (point, time) => this.hand(point, time),
       onGesture: (name) => this.gesture(name),
+      onEvent: (level, name, detail, action) =>
+        this.events.onEvent({ level, source: 'camara', name, detail, action }),
     });
     this.telemetry = this.readTelemetry();
   }

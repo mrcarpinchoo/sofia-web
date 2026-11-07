@@ -8,6 +8,8 @@ import type { FilterParam, FilterParams, FilterType } from '../core/filters';
 import { DEFAULT_SPACING, safeSpacing } from '../core/kinematics';
 import type { TrajectoryType } from '../core/trajectories';
 import type { LimitPolicy } from '../core/types';
+import { EventLog, describe } from '../diagnostics/eventLog';
+import type { LabEvent } from '../diagnostics/eventLog';
 import { MaestroLink } from '../hardware/MaestroLink';
 import type { LinkSnapshot } from '../hardware/MaestroLink';
 import type { GestureId } from '../hardware/protocol';
@@ -52,6 +54,9 @@ interface LabStore {
   /** The 3D view shows the real panel's angles instead of the simulation. */
   mirroring: boolean;
 
+  // Event log
+  eventCount: number;
+
   // Page
   controlsOpen: boolean;
   notesOpen: boolean;
@@ -89,6 +94,7 @@ interface LabStore {
   /** Camera point, 0-1 (mirrored, y down); repeated until endPanelTarget. */
   aimPanel: (x: number, y: number) => void;
   endPanelTarget: () => void;
+  downloadEvents: () => void;
 
   setControlsOpen: (open: boolean) => void;
   setNotesOpen: (open: boolean) => void;
@@ -99,6 +105,36 @@ interface LabStore {
 const lab = () => useLab.getState();
 let toastTimer: ReturnType<typeof setTimeout>;
 
+const eventLog = new EventLog();
+/** Recoveries worth a toast; warnings and errors always get one. */
+const TOASTED = new Set([
+  'ENLACE_RESTABLECIDO',
+  'CONTROL_RETOMADO',
+  'CAMARA_RECUPERADA',
+  'STOP_CONFIRMADO',
+  'OFF_CONFIRMADO',
+]);
+
+/** Logs an event with the page's state at that moment; toasts the important ones. */
+export function logEvent(event: LabEvent) {
+  eventLog.record(event, eventContext());
+  useLab.setState({ eventCount: eventLog.size });
+  if (event.level !== 'INFO' || TOASTED.has(event.name)) lab().showToast(describe(event));
+}
+
+/** The conditions an event happened in, for the log. */
+function eventContext() {
+  const { cameraActivity, mode, link: snapshot } = lab();
+  const parts = [`camara=${cameraActivity}`, `objetivo=${mode}`, `maestro=${snapshot.state}`];
+  const { status, p95 } = snapshot;
+  if (status) {
+    const controller = status.isController ? 'este_navegador' : status.controller;
+    parts.push(`control=${controller}`, `modo=${status.mode}`);
+  }
+  if (p95 !== null && Number.isFinite(p95)) parts.push(`p95=${Math.round(p95)}ms`);
+  return parts.join('; ');
+}
+
 export const engine = new LabEngine({
   onToast: (message) => lab().showToast(message),
   onCameraActivity: (cameraActivity) => useLab.setState({ cameraActivity }),
@@ -107,27 +143,33 @@ export const engine = new LabEngine({
   // The camera also drives the real panel while this browser controls it,
   // sending what sofia-tracker sends: the gesture and the hand's position.
   onGesture: (name) => {
-    if (controlsPanel()) link.gesture(GESTURES[name].id, name);
+    const sending = controlsPanel();
+    if (sending) link.gesture(GESTURES[name].id, name);
+    const state = lab().link.state;
+    logEvent({
+      level: 'INFO',
+      source: 'camara',
+      name: 'GESTO_DETECTADO',
+      detail: name,
+      action: sending
+        ? 'se envía al Maestro'
+        : state === 'disconnected'
+          ? 'Maestro no conectado'
+          : 'no se envía: este navegador no controla el panal',
+    });
   },
   onHand: (point) => {
     if (!controlsPanel()) return;
     if (point) link.setTarget(...point);
     else link.endTarget();
   },
+  onEvent: (event) => logEvent(event),
 });
 
 function controlsPanel() {
   const { link: snapshot } = lab();
   return snapshot.state === 'online' && Boolean(snapshot.status?.isController);
 }
-
-/** Why the Maestro rejected a command, as the user should read it. */
-const REJECTIONS: Record<string, string> = {
-  NOT_CONTROLLER: 'otro cliente tiene el control. Pulsa ARMAR cuando quede libre.',
-  BUSY: 'hay un gesto en curso.',
-  INTERNAL: 'las placas PWM no responden. Revisa el cableado y la alimentación.',
-  BAD_PAYLOAD: 'valor fuera de rango.',
-};
 
 export const link = new MaestroLink({
   onChange: (snapshot) => useLab.setState({ link: snapshot }),
@@ -136,8 +178,7 @@ export const link = new MaestroLink({
     const mirroring = angles !== null;
     if (lab().mirroring !== mirroring) useLab.setState({ mirroring });
   },
-  onRejected: (command, reason) =>
-    lab().showToast(`${command}: ${REJECTIONS[reason] ?? reason}`),
+  onEvent: (event) => logEvent(event),
 });
 // Hot reload creates a new link; close the old socket so it releases control.
 import.meta.hot?.dispose(() => link.dispose());
@@ -168,6 +209,8 @@ export const useLab = create<LabStore>()((set, get) => ({
   linkHost: '192.168.4.1:81',
   link: { state: 'disconnected', firmware: null, status: null, p95: null, within500: null },
   mirroring: false,
+
+  eventCount: 0,
 
   controlsOpen: true,
   notesOpen: false,
@@ -240,21 +283,30 @@ export const useLab = create<LabStore>()((set, get) => ({
   startCamera: () => {
     engine.startCamera();
     set({ mode: 'camera' });
+    logEvent({ level: 'INFO', source: 'gui', name: 'DETECCION_INICIADA', detail: 'Activar cámara', action: '' });
   },
-  stopCamera: () => engine.stopCamera(),
+  stopCamera: () => {
+    engine.stopCamera();
+    logEvent({ level: 'INFO', source: 'gui', name: 'DETECCION_FINALIZADA', detail: 'por el usuario', action: '' });
+  },
 
   setLinkHost: (linkHost) => set({ linkHost }),
   connectLink: () => {
     const host = get().linkHost.trim().replace(/^wss?:\/\//, '').replace(/\/+$/, '');
+    logEvent({ level: 'INFO', source: 'gui', name: 'MAESTRO_CONECTADO', detail: `ws://${host}/`, action: '' });
     link.connect(`ws://${host}/`);
   },
-  disconnectLink: () => link.disconnect(),
+  disconnectLink: () => {
+    link.disconnect();
+    logEvent({ level: 'INFO', source: 'gui', name: 'MAESTRO_DESCONECTADO', detail: 'por el usuario', action: '' });
+  },
   armPanel: () => link.arm(),
   stopPanel: () => link.stop(),
   offPanel: () => link.off(),
   playGesture: (id, name) => link.gesture(id, name),
   aimPanel: (x, y) => link.setTarget(x, y),
   endPanelTarget: () => link.endTarget(),
+  downloadEvents: () => eventLog.download(),
 
   setControlsOpen: (controlsOpen) => set({ controlsOpen }),
   setNotesOpen: (notesOpen) => set({ notesOpen }),
@@ -265,3 +317,35 @@ export const useLab = create<LabStore>()((set, get) => ({
   },
   setSceneError: (sceneError) => set({ sceneError }),
 }));
+
+logEvent({ level: 'INFO', source: 'gui', name: 'SESION_INICIADA', detail: navigator.userAgent, action: '' });
+
+// Errors nobody caught: logged, and the page keeps running.
+let loggingUncaught = false;
+function logUncaught(error: unknown, where: string) {
+  if (loggingUncaught) return; // an error while logging would come back here
+  loggingUncaught = true;
+  try {
+    const { name, message } = error instanceof Error ? error : { name: 'Error', message: String(error) };
+    logEvent({
+      level: 'ERROR',
+      source: 'gui',
+      name: 'EXCEPCION_NO_CONTROLADA',
+      detail: `${name}: ${message} (${where})`,
+      action: 'se registra y la página sigue en ejecución',
+    });
+  } finally {
+    loggingUncaught = false;
+  }
+}
+const onError = (event: ErrorEvent) => {
+  const file = event.filename.split('/').pop();
+  logUncaught(event.error ?? event.message, file ? `${file}:${event.lineno}` : 'script');
+};
+const onRejection = (event: PromiseRejectionEvent) => logUncaught(event.reason, 'promesa');
+window.addEventListener('error', onError);
+window.addEventListener('unhandledrejection', onRejection);
+import.meta.hot?.dispose(() => {
+  window.removeEventListener('error', onError);
+  window.removeEventListener('unhandledrejection', onRejection);
+});

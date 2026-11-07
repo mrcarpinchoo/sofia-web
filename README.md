@@ -54,7 +54,9 @@ zooms; in Cursor mode one finger moves the target and two fingers orbit.
   input.
 - `src/hardware/`: the link to the Maestro. `protocol.ts` encodes and decodes
   frames (mirrors `sofia-firmware/src/protocol.h`); `MaestroLink` is the
-  WebSocket client.
+  WebSocket client, with reconnection.
+- `src/diagnostics/eventLog.ts`: the session's event log (errors,
+  recoveries, commands), downloadable as CSV.
 - `src/state/store.ts`: Zustand store with what the UI shows. Its actions call
   the engine and the link.
 - `src/ui/`: React components. `panels/` are the control sections, `stage/` what
@@ -135,3 +137,33 @@ What the panel does:
 
 With the camera on (panel 04), recognised gestures and
 the hand's position are sent too; see [Hand gestures](#hand-gestures).
+
+### Errors and recovery
+
+The same rules and event names as `sofia-tracker` (its
+`docs/MANEJO_DE_ERRORES.md` describes them). Two events are only here:
+`CONEXION_FALLIDA` (the first connection failed) and `CONEXION_CERRADA` (a
+new socket closed again during the same outage).
+
+- **Link lost.** If the WebSocket closes (Maestro rebooted or out of range),
+  the state shows *Reconectando…* and the page reconnects every 2 s until
+  **Desconectar**. If it stays open but nothing answers, the state shows
+  *Sin respuesta*, and after 5 s a new connection is opened. A first
+  connection that fails is reported instead (wrong address or network).
+- **Control.** The Maestro releases a browser's control as soon as its
+  connection closes. If you had pressed **Armar**, the page sends it again as
+  soon as the link answers, unless the outage lasted more than 30 s, you
+  pressed STOP, or another client took control. A STOP without an answer is
+  sent again until the Maestro confirms it. Gestures are dropped while the
+  link isn't answering instead of being played late.
+- **Camera lost** (unplugged, taken by another program): the camera is
+  requested again every 2 s with the hand model kept loaded. A camera that
+  can't be opened when pressing **Activar cámara** is reported instead.
+  Hiding the tab still turns the camera off.
+- **Unexpected errors** are logged and the page keeps running.
+
+Every event (gestures, commands, errors and recoveries, with the page's
+state at that moment) goes to the session's event log; **Descargar CSV** in
+panel 00 saves it as `eventos_web_<date>_<time>.csv`, with the same columns
+as `sofia-tracker`'s log. It lives in memory: download it before closing
+the tab. Warnings, errors and recoveries also show as toasts.
