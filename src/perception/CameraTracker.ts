@@ -1,37 +1,33 @@
 // Runs MediaPipe on the webcam and reports what it sees through callbacks.
 // Images are processed locally; nothing leaves the browser.
 
-import type { GestureRecognizer, PoseLandmarker } from '@mediapipe/tasks-vision';
+import type { HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
+import type { TrackerGesture } from '../core/choreography';
 import type { Vec2 } from '../core/types';
-import {
-  GESTURES,
-  GESTURE_HOLD_MS,
-  GestureLatch,
-  MIN_GESTURE_SCORE,
-  isGesture,
-  torsoCenter,
-} from './gestures';
-import type { Framing, GestureName, Landmark } from './gestures';
-import { isHeart } from './heart';
+import { GESTURES, torsoCenter } from './gestures';
+import type { Framing, Landmark } from './gestures';
+import { GestureRecognizer } from './handRecognizer';
 
 export type CameraKind = 'body' | 'hand';
 export type CameraActivity = 'off' | 'loading' | 'running';
 
 type PoseResult = ReturnType<PoseLandmarker['detectForVideo']>;
-type GestureResult = ReturnType<GestureRecognizer['recognizeForVideo']>;
+type HandResult = ReturnType<HandLandmarker['detectForVideo']>;
 
 export interface CameraCallbacks {
   onStatus: (message: string) => void;
   onActive: (activity: CameraActivity) => void;
   onBody: (point: Vec2, time: number) => void;
-  onGesture: (name: GestureName, time: number, changed: boolean) => void;
+  /** Smoothed palm centroid, 0-1 in the mirrored image, or null without a hand. */
+  onHand: (point: Vec2 | null, time: number) => void;
+  onGesture: (name: TrackerGesture, time: number) => void;
 }
 
 // Served from public/, see scripts/fetch-assets.mjs.
 const ASSETS = `${import.meta.env.BASE_URL}mediapipe`;
 const MODELS: Record<CameraKind, string> = {
   body: `${ASSETS}/models/pose_landmarker_lite.task`,
-  hand: `${ASSETS}/models/gesture_recognizer.task`,
+  hand: `${ASSETS}/models/hand_landmarker.task`,
 };
 
 const POSE_EDGES = [
@@ -43,14 +39,19 @@ const HAND_EDGES = [
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
 ];
 
+const POSTURE_NAMES = { PALM: 'palma', FIST: 'puño', INDEX: 'índice', V: 'V' };
+
 const CAMERA_ERRORS: Record<string, string> = {
   NotAllowedError: 'Permiso denegado. Permite la cámara en el navegador y pulsa Activar cámara.',
   NotFoundError: 'No se encontró ninguna cámara conectada.',
   NotReadableError: 'La cámara está ocupada o no puede abrirse. Cierra otras aplicaciones que la usen.',
 };
 
-/** Minimum time between detections, in ms. */
-const INFERENCE_INTERVAL_MS = 100;
+/**
+ * Minimum time between detections, in ms. Hands run on every frame, like
+ * sofia-tracker: its recognizer counts frames (majority vote, GRAB).
+ */
+const INFERENCE_INTERVAL_MS: Record<CameraKind, number> = { body: 100, hand: 0 };
 
 function timeout<T>(promise: Promise<T>, ms = 45000): Promise<T> {
   let id: ReturnType<typeof setTimeout>;
@@ -63,7 +64,7 @@ function timeout<T>(promise: Promise<T>, ms = 45000): Promise<T> {
 export class CameraTracker {
   running = false;
   framing: Framing = 'upper';
-  latch = new GestureLatch();
+  readonly recognizer = new GestureRecognizer();
   lastCenter: Vec2 | null = null;
 
   private video: HTMLVideoElement | null = null;
@@ -73,7 +74,7 @@ export class CameraTracker {
   // Incremented by stop(), so that async work from an older start() gives up.
   private epoch = 0;
   private stream: MediaStream | null = null;
-  private task: PoseLandmarker | GestureRecognizer | null = null;
+  private task: PoseLandmarker | HandLandmarker | null = null;
   private frameId = 0;
   private lastFrame = -1;
   private lastInference = -Infinity;
@@ -145,11 +146,9 @@ export class CameraTracker {
       this.lastInference = -Infinity;
       this.lastCenter = null;
       this.lastBodyTime = 0;
-      this.latch.reset();
+      this.recognizer.reset();
       onActive('running');
-      onStatus(
-        kind === 'body' ? 'Buscando una persona…' : 'Muestra una mano y mantén uno de los cinco gestos.',
-      );
+      onStatus(kind === 'body' ? 'Buscando una persona…' : 'Muestra una mano a la cámara.');
       this.loop(session);
     } catch (error) {
       if (session !== this.epoch) return;
@@ -178,7 +177,7 @@ export class CameraTracker {
     if (this.overlay) {
       this.overlay.getContext('2d')?.clearRect(0, 0, this.overlay.width, this.overlay.height);
     }
-    this.latch.reset();
+    this.recognizer.reset();
     this.callbacks.onActive('off');
     if (announce) this.callbacks.onStatus('Cámara apagada. Los paneles conservan la última pose.');
   }
@@ -193,7 +192,7 @@ export class CameraTracker {
       baseOptions: { modelAssetPath: MODELS[kind], delegate: 'CPU' as const },
       runningMode: 'VIDEO' as const,
     };
-    const loading: Promise<PoseLandmarker | GestureRecognizer> =
+    const loading: Promise<PoseLandmarker | HandLandmarker> =
       kind === 'body'
         ? vision.PoseLandmarker.createFromOptions(files, {
             ...options,
@@ -203,12 +202,12 @@ export class CameraTracker {
             minTrackingConfidence: 0.55,
             outputSegmentationMasks: false,
           })
-        : vision.GestureRecognizer.createFromOptions(files, {
+        : // Same settings as sofia-tracker's detection.py
+          vision.HandLandmarker.createFromOptions(files, {
             ...options,
-            numHands: 2,
-            minHandDetectionConfidence: 0.55,
-            minHandPresenceConfidence: 0.55,
-            minTrackingConfidence: 0.55,
+            numHands: 1,
+            minHandDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6,
           });
     let expired = false;
     // If the camera stopped meanwhile, nobody else will close this task.
@@ -236,7 +235,7 @@ export class CameraTracker {
       this.task &&
       video.readyState >= 2 &&
       video.videoWidth &&
-      now - this.lastInference >= INFERENCE_INTERVAL_MS &&
+      now - this.lastInference >= INFERENCE_INTERVAL_MS[this.kind] &&
       video.currentTime !== this.lastFrame
     ) {
       this.lastFrame = video.currentTime;
@@ -245,7 +244,7 @@ export class CameraTracker {
         if (this.kind === 'body') {
           this.processBody((this.task as PoseLandmarker).detectForVideo(video, now), now);
         } else {
-          this.processHand((this.task as GestureRecognizer).recognizeForVideo(video, now), now);
+          this.processHand((this.task as HandLandmarker).detectForVideo(video, now), now);
         }
       } catch (error) {
         this.stop(false);
@@ -291,33 +290,31 @@ export class CameraTracker {
     );
   }
 
-  private processHand(result: GestureResult, now: number) {
-    const { onGesture, onStatus } = this.callbacks;
+  private processHand(result: HandResult, now: number) {
+    const { onGesture, onHand, onStatus } = this.callbacks;
     const hands = result.landmarks ?? [];
     this.drawHands(hands);
-    const aspect = (this.video?.videoWidth || 640) / (this.video?.videoHeight || 480);
-    const heart = isHeart(hands, aspect);
-    // With two hands, only the heart is actionable; avoid accidental single-hand commands.
-    const top = hands.length === 1 ? result.gestures?.[0]?.[0] : null;
-    const name = heart ? 'Heart' : top?.categoryName;
-    const score = heart ? 1 : (top?.score ?? 0);
-    const accepted = isGesture(name) && score >= MIN_GESTURE_SCORE;
-    const changed = this.latch.update(name, score, now);
-
-    if (accepted && this.latch.active === name && now - this.latch.since >= GESTURE_HOLD_MS) {
-      const gesture = GESTURES[name];
-      onGesture(name, now, Boolean(changed));
-      onStatus(
-        `${gesture.name} · ${name === 'Heart' ? 'geometría reconocida' : `${Math.round(score * 100)}%`} · ${gesture.motion}`,
-      );
-    } else if (accepted) {
-      onStatus(`Mantén ${GESTURES[name].name.toLowerCase()} medio segundo…`);
-    } else if (hands.length === 2) {
-      onStatus('Une índices arriba y pulgares abajo para formar el corazón.');
-    } else if (hands.length) {
-      onStatus('Gesto no asignado. Usa palma, puño, V, índice o corazón con dos manos.');
-    } else {
+    const hand = hands[0];
+    if (!hand) {
+      this.recognizer.reset(); // also clears the smoothing, as in sofia-tracker
+      onHand(null, now);
       onStatus('No se ve una mano. Acércala a la cámara.');
+      return;
+    }
+
+    // sofia-tracker mirrors the frame before detecting, so mirror the
+    // landmarks: the same hand gives the same postures, swipes and target.
+    const w = this.video?.videoWidth || 640;
+    const h = this.video?.videoHeight || 480;
+    const mirrored = hand.map((p) => ({ x: 1 - p.x, y: p.y }));
+    const { posture, event } = this.recognizer.update(mirrored, now / 1000, w, h);
+    const centroid = this.recognizer.centroid;
+    if (centroid) onHand([centroid[0] / w, centroid[1] / h], now);
+    if (event) {
+      onGesture(event, now);
+      onStatus(`${GESTURES[event].name} → ${GESTURES[event].motion}`);
+    } else {
+      onStatus(posture ? `Postura: ${POSTURE_NAMES[posture]}. Siguiendo la mano.` : 'Siguiendo la mano.');
     }
   }
 

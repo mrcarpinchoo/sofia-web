@@ -10,7 +10,6 @@ import {
   PLATE_TOP,
   plateCorners,
 } from '../core/kinematics';
-import { heartWave } from '../perception/heart';
 import type { Unit } from '../simulation/Simulation';
 import type { TargetMode } from '../simulation/targets';
 
@@ -28,13 +27,12 @@ interface UnitMeshes {
 interface DrawFlags {
   rays: boolean;
   ideal: boolean;
-  heartActive: boolean;
-  heartTime: number;
+  /** Draw the target sphere and its trail (default true). */
+  showTarget?: boolean;
 }
 
 const SELECTED_COLOR = 0x83d8d3;
 const PLATE_COLOR = 0xb1c7d2;
-const HEART_COLOR = 0xff6685;
 const COLLISION_COLOR = 0xff4a2e;
 const TRAIL_LENGTH = 360;
 // Spacing the camera distance and fog below were tuned for.
@@ -233,37 +231,26 @@ export class SofiaScene {
     colliding: ReadonlySet<number>,
     trailSample = false,
   ) {
-    const { rays, ideal, heartActive, heartTime } = flags;
+    const { rays, ideal, showTarget = true } = flags;
     units.forEach((state, i) => {
       const unit = this.units[i];
-      const wave = heartActive
-        ? Math.abs(
-            heartWave(Math.hypot(unit.root.position.x, unit.root.position.y) / this.spacing, heartTime),
-          )
-        : 0;
       unit.pivot.rotation.x = state.q[0];
       unit.pitch.rotation.y = state.q[1];
       unit.ideal.rotation.set(state.ik.q[0], state.ik.q[1], 0, 'XYZ');
       unit.ideal.visible = ideal;
-      unit.ray.visible = rays && !heartActive;
+      unit.ray.visible = rays;
       const material = unit.panel.material;
       material.color.setHex(
-        colliding.has(i)
-          ? COLLISION_COLOR
-          : heartActive
-            ? HEART_COLOR
-            : i === this.selected
-              ? SELECTED_COLOR
-              : PLATE_COLOR,
+        colliding.has(i) ? COLLISION_COLOR : i === this.selected ? SELECTED_COLOR : PLATE_COLOR,
       );
-      material.emissiveIntensity = heartActive ? 0.12 + 1.2 * wave : 1;
-      material.emissive.setHex(state.ik.unreachable ? 0x4a1a06 : heartActive ? 0x8a1029 : 0);
+      material.emissiveIntensity = 1;
+      material.emissive.setHex(state.ik.unreachable ? 0x4a1a06 : 0);
       unit.ray.material.opacity = i === this.selected ? 0.65 : 0.13;
     });
 
-    this.sphere.visible = !heartActive;
-    this.halo.visible = !heartActive;
-    this.trail.visible = !heartActive;
+    this.sphere.visible = showTarget;
+    this.halo.visible = showTarget;
+    this.trail.visible = showTarget;
     this.sphere.position.fromArray(target);
     this.halo.position.copy(this.sphere.position);
     this.halo.quaternion.copy(this.camera.quaternion);

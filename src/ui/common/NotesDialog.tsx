@@ -110,19 +110,19 @@ export function NotesDialog() {
         anterior; no se identifica a las personas ni se garantiza conservar la misma al cruzarse.
       </p>
       <p>
-        Gestos: palma abierta → saludo lateral; puño → mirada al centro; V → baile en ocho; índice
-        arriba → asentimiento vertical; corazón con dos manos → ola radial de inclinaciones desde el
-        centro hacia afuera, conservando los 16 hexágonos en panal. El corazón se reconoce por
-        proximidad de índices y pulgares y disposición de las manos; es una regla geométrica, no una
-        clase entrenada ni un porcentaje de confianza. Las bases permanecen fijas y centradas, en
-        filas escalonadas de 3, 4, 5 y 4 unidades; los hexágonos tienen sus caras alineadas con sus
-        vecinos. Cada anillo de la ola se retrasa según su distancia al centro. En la ola cada unidad
-        tiene su propio objetivo cinemático, registrado en el CSV. Mantén el gesto al menos 0.45 s;
-        se exige confianza ≥65%. Todas las trayectorias atraviesan la misma cinemática, restricciones
-        y filtros. La señal de cámara se estabiliza con τ = 0.12 s antes de los filtros articulares.
-        En Personas, perder la detección durante 0.8 s retiene la pose y detiene los filtros. En
-        Gestos, una detección confirmada conserva el movimiento en bucle aunque las manos salgan de
-        la imagen; solo cambia al confirmar otro gesto. Apagar la cámara detiene el movimiento.
+        Gestos: los seis de <code>sofia-tracker</code>, con las mismas reglas, umbrales y
+        suavizado (son una copia de su <code>gestures.py</code>). Índice → mirar arriba y luego
+        abajo; V → dibujar un 8 horizontal; palma abierta → mirar a la derecha y luego a la
+        izquierda; barrido a la izquierda o a la derecha → ola que cruza el panal en esa dirección;
+        agarre (de palma a puño) → sobresalto y regreso al reposo. Las posturas estáticas se
+        disparan al sostenerlas quietas 0.5 s. Cada gesto reproduce una vez el mismo movimiento que
+        el Maestro (una copia de su coreografía), en el que cada unidad tiene su propio objetivo,
+        registrado en el CSV; un gesto reconocido mientras otro se reproduce se ignora. Entre
+        gestos, el centro de la palma se mapea como en el Maestro: los bordes de la imagen quedan a
+        ±230 mm del centro del panal, a la profundidad elegida. Todas las trayectorias atraviesan la
+        misma cinemática, restricciones y filtros. La señal de cámara se estabiliza con τ = 0.12 s
+        antes de los filtros articulares. Perder la detección retiene la pose y detiene los
+        filtros: 0.8 s en Personas y 0.5 s en Gestos, como el Maestro.
       </p>
       <p>
         La cámara física no se ha probado en tu equipo. La iluminación, el encuadre, los permisos y

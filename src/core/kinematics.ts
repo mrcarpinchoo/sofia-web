@@ -74,6 +74,19 @@ export function forward(module: PanelModule, config: KinematicConfig, q: JointAn
   return { origin: o, center: add(o, scale(direction, config.z23)), direction, rotation: r };
 }
 
+/**
+ * A point `distance` mm along the axis a module has at angles `q`: as a
+ * target, it gives back `q` (within the limits).
+ */
+export function pointAlong(
+  module: PanelModule,
+  config: KinematicConfig,
+  q: JointAngles,
+  distance = 400,
+): Vec3 {
+  return add(origin(module, config), scale(mul(module.mount, mul(rotation(q), [0, 0, 1])), distance));
+}
+
 export function inverse(
   module: PanelModule,
   config: KinematicConfig,

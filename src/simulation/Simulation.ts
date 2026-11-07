@@ -3,7 +3,16 @@
 
 import { DEFAULT_FILTER_PARAMS, JointFilter } from '../core/filters';
 import type { FilterParams, FilterType } from '../core/filters';
-import { DEFAULT_SPACING, angularError, forward, inverse, layout } from '../core/kinematics';
+import { duration, sample } from '../core/choreography';
+import type { TrackerGesture } from '../core/choreography';
+import {
+  DEFAULT_SPACING,
+  angularError,
+  forward,
+  inverse,
+  layout,
+  pointAlong,
+} from '../core/kinematics';
 import { RAD } from '../core/math';
 import { trajectory } from '../core/trajectories';
 import type { TrajectoryType } from '../core/trajectories';
@@ -16,9 +25,7 @@ import type {
   Vec2,
   Vec3,
 } from '../core/types';
-import { gestureTarget, imageTarget } from '../perception/gestures';
-import type { GestureName } from '../perception/gestures';
-import { heartTarget } from '../perception/heart';
+import { handTarget, imageTarget } from '../perception/gestures';
 import type { CameraKind } from '../perception/CameraTracker';
 import { TargetInputs } from './targets';
 import type { TargetMode } from './targets';
@@ -35,9 +42,12 @@ const CAMERA_SMOOTHING = 0.12;
 /** The pose freezes this long after losing the person, in ms. */
 export const DETECTION_FREEZE_MS = 800;
 
+/** Without a hand for this long the pose holds, as on the Maestro, in ms. */
+const HAND_HOLD_MS = 500;
+
 // One sample every 12 steps (10 Hz).
 const SAMPLE_EVERY = 12;
-const HISTORY_LENGTH = 120;
+export const HISTORY_LENGTH = 120;
 const MAX_RECORDED_SAMPLES = 3000;
 
 export interface Unit {
@@ -74,10 +84,11 @@ export interface SimulationState {
   cameraGain: number;
   mirror: boolean;
   lastCameraSeen: number;
-  gesture: GestureName | null;
+  /** Smoothed palm centroid, 0-1 in the mirrored image (hand mode). */
+  handPoint: Vec2 | null;
+  /** Gesture being played, or null. */
+  gesture: TrackerGesture | null;
   gestureStart: number;
-  heartActive: boolean;
-  heartTime: number;
 }
 
 export class Simulation {
@@ -111,10 +122,9 @@ export class Simulation {
     cameraGain: 1,
     mirror: true,
     lastCameraSeen: -Infinity,
+    handPoint: null,
     gesture: null,
     gestureStart: 0,
-    heartActive: false,
-    heartTime: 0,
   };
 
   modules: PanelModule[] = layout();
@@ -178,24 +188,28 @@ export class Simulation {
     if (state.mode === 'auto') state.phase += DT * state.speed;
     state.target = this.inputs.sample(state.mode, state);
 
-    const gesture = state.gesture;
+    // Hand mode works like the Maestro: a gesture plays once, and between
+    // gestures the panel follows the hand; without a hand it holds.
+    const hand = state.mode === 'camera' && state.cameraKind === 'hand';
+    if (state.gesture && (!hand || state.t - state.gestureStart >= duration(state.gesture))) {
+      state.gesture = null;
+    }
+    const playing = hand ? state.gesture : null;
     const frozen =
       state.mode === 'camera' &&
+      !playing &&
       (!this.isCameraRunning() ||
-        (state.cameraKind === 'hand'
-          ? !gesture
-          : now - state.lastCameraSeen > DETECTION_FREEZE_MS));
+        now - state.lastCameraSeen > (hand ? HAND_HOLD_MS : DETECTION_FREEZE_MS));
 
-    if (state.mode === 'camera' && !frozen) {
-      const goal =
-        state.cameraKind === 'body'
-          ? imageTarget(state.cameraPoint as Vec2, {
+    if (state.mode === 'camera' && !frozen && !playing) {
+      const goal = hand
+          ? handTarget(state.handPoint as Vec2, state.depth)
+          : imageTarget(state.cameraPoint as Vec2, {
               mirror: state.mirror,
               gain: state.cameraGain,
               depth: state.depth,
               center: state.cameraCenter,
-            })
-          : gestureTarget(gesture as GestureName, state.t - state.gestureStart, state.depth);
+            });
       const a = 1 - Math.exp(-DT / CAMERA_SMOOTHING);
       state.target = [
         state.target[0] + a * (goal[0] - state.target[0]),
@@ -204,13 +218,14 @@ export class Simulation {
       ];
     }
 
-    state.heartActive =
-      state.mode === 'camera' && state.cameraKind === 'hand' && gesture === 'Heart';
-    if (state.heartActive && !frozen) state.heartTime += DT;
+    // While a gesture plays, each unit aims along its own choreographed direction.
+    const choreographed = playing
+      ? sample(playing, state.t - state.gestureStart, this.modules)
+      : null;
 
     this.units.forEach((unit, i) => {
       const module = this.modules[i];
-      unit.target = state.heartActive ? heartTarget(module, config, state.heartTime) : state.target;
+      unit.target = choreographed ? pointAlong(module, config, choreographed[i]) : state.target;
       unit.ik = inverse(module, config, unit.target, unit.q);
       if (
         frozen ||

@@ -4,8 +4,8 @@ The SOFIA kinematic lab as a web app: a 3D simulation of the 16-unit panel,
 selectable joint filters, and body and gesture tracking from the webcam. It
 runs entirely in the browser and also works on a phone.
 
-At this stage it only simulates. Nothing here moves the servos yet; see
-[Planned ESP32 link](#planned-esp32-link).
+Panel 00 also controls the real panel over Wi‑Fi through the SOFIA Maestro
+(the ESP32 in `sofia-firmware`); see [Real panel](#real-panel).
 
 ## Requirements
 
@@ -51,18 +51,25 @@ fingers orbit.
 
 ## Files
 
-- `src/core/`: kinematics, filters, trajectories and plate collision detection.
-  Plain functions with no DOM or React, in mm, rad and s.
-- `src/perception/`: `CameraTracker` runs MediaPipe on the webcam; `gestures.ts`
-  and `heart.ts` turn landmarks into targets.
+- `src/core/`: kinematics, filters, trajectories, plate collision detection and
+  `choreography.ts`, the motion of each gesture (a copy of
+  `sofia-firmware/src/choreography.cpp`). Plain functions with no DOM or React,
+  in mm, rad and s.
+- `src/perception/`: `CameraTracker` runs MediaPipe on the webcam.
+  `handRecognizer.ts` is `sofia-tracker`'s gesture recognizer (a copy of its
+  `gestures.py`); `gestures.ts` holds the gesture texts and turns body and hand
+  positions into targets.
 - `src/simulation/`: `Simulation` is the fixed 120 Hz step. `LabEngine` connects
   it to the scene and the camera and runs the frame loop. `targets.ts` holds the
   target sources and `csv.ts` the data export.
 - `src/scene/`: `SofiaScene`, the three.js view, including mouse and touch
   input.
 - `src/recording/`: records the browser tab to a video.
+- `src/hardware/`: the link to the Maestro. `protocol.ts` encodes and decodes
+  frames (mirrors `sofia-firmware/src/protocol.h`); `MaestroLink` is the
+  WebSocket client.
 - `src/state/store.ts`: Zustand store with what the UI shows. Its actions call
-  the engine.
+  the engine and the link.
 - `src/ui/`: React components. `panels/` are the control sections, `stage/` what
   sits over the 3D view, `layout/` the page frame and `common/` shared pieces.
 - `src/styles/app.css`: Tailwind setup. It holds the theme (colors, text sizes), the layout variants (`wide`, `medium`, `short`, `low`, `compact`, `phone`) and the default look of buttons and form fields. Everything else is utility classes on the components.
@@ -84,22 +91,60 @@ settings are changed back. The plate size also differs: it now matches
 `module.step` and drawing `Sofia003-E001-04_2`. The default spacing is 150 mm, and
 `z12 = 22` and `z23 = 37` come from the technical specification instead of the
 MATLAB values of 60 and 100.
-The USB link wasn't ported, so that HTML and
-`SOFIA_Tracking.ino` remain the way to drive the bench servos for now.
+The original's USB link wasn't ported: the real panel is reached over Wi‑Fi
+instead (below). Its hand gestures (open palm, fist, V, index up and the
+two-hand heart, from MediaPipe's gesture recognizer) were replaced by
+`sofia-tracker`'s six.
 
-## Planned ESP32 link
+## Hand gestures
 
-The physical panel will connect over Wi‑Fi to the SOFIA Maestro, the ESP32 in
-`sofia-firmware`: network `SOFIA-Maestro`, address `192.168.4.1:4210`, using the
-protocol in `sofia-firmware/docs/PROTOCOL.md`. This is still to be designed.
-Points to settle:
+In panel 04, **Gestos de mano** recognises the same six gestures as
+`sofia-tracker` (INDEX, V, PALM, SWIPE_LEFT, SWIPE_RIGHT, GRAB) with the same
+model and rules, and the panel behaves like the Maestro: each gesture plays its
+motion once, between gestures the panel follows the hand, and without a hand
+it holds the pose after 0.5 s. While this browser controls the real panel
+(panel 00), the gestures and the hand's position are also sent to the Maestro,
+as `sofia-tracker` sends them.
 
-- **Browsers can't send UDP.** The Maestro speaks UDP, so something has to sit
-  between the web app and it.
-- **The firmware has no motion yet.** It only answers PING and has no servo
-  code. The PCA9685 and motion code is in `SOFIA_Tracking.ino`.
-- **The protocol has no motion commands that fit.** `SET_TARGET` carries only a
-  normalized x, y, and `PROTOCOL.md` defines no ARM, STOP or OFF.
+Two files are copies that must be kept in step with their originals:
 
-`Simulation.jointAngles` already exposes each unit's filtered angles for
-whatever ends up sending them.
+| File | Copy of |
+|---|---|
+| `src/perception/handRecognizer.ts` | `sofia-tracker/gestures.py` |
+| `src/core/choreography.ts` | `sofia-firmware/src/choreography.cpp` |
+
+## Real panel
+
+The Maestro creates the Wi‑Fi network `SOFIA-Maestro` (password
+`sofia-maestro`) and accepts the commands of
+`sofia-firmware/docs/PROTOCOL.md` over a WebSocket at `ws://192.168.4.1:81/`.
+
+1. Connect the computer to `SOFIA-Maestro` and run `pnpm dev`.
+2. Open `http://localhost:5173`, panel **00 Panel real · Wi‑Fi**, and press
+   **Conectar**.
+
+The page must be served over plain HTTP: an `https://` page (such as
+`pnpm dev:phone`) can't open a `ws://` connection, and the panel says so.
+
+What the panel does:
+
+- **Armar** takes control and powers the servos (the Maestro switches them on
+  one by one). Only one client controls SOFIA at a time; the others, such as
+  `sofia-tracker`, are refused until it's released.
+- **STOP** (in the panel and over the 3D view) holds the pose and releases
+  control. It works from any client, controlling or not. **Apagar servos**
+  turns the PWM off.
+- **Gestos** plays the motion for each of `sofia-tracker`'s gestures. The
+  Maestro computes the motions; the browser only names the gesture.
+- **Apuntar** sends the point under the pointer while it's pressed, as
+  `sofia-tracker` sends the hand's position. On release the Maestro holds the
+  pose after 0.5 s.
+- While connected, the 3D view mirrors the real panel: it shows the angles
+  the Maestro commands (polled 10 times per second) instead of the
+  simulation, and the stage says **PANEL REAL**.
+- **Latencia** is the 95th percentile of command-to-response time and the
+  share answered within 500 ms, for the paper's targets (≤ 250 ms and
+  ≥ 99 %).
+
+With the camera in **Gestos de mano** (panel 04), recognised gestures and
+the hand's position are sent too; see [Hand gestures](#hand-gestures).

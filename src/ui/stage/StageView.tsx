@@ -17,6 +17,9 @@ export function StageView() {
   const setControlsOpen = useLab((s) => s.setControlsOpen);
   const setSceneError = useLab((s) => s.setSceneError);
   const mode = useLab((s) => s.mode);
+  const mirroring = useLab((s) => s.mirroring);
+  const linkState = useLab((s) => s.link.state);
+  const stopPanel = useLab((s) => s.stopPanel);
   const phone = useIsPhone();
 
   useEffect(() => {
@@ -56,12 +59,23 @@ export function StageView() {
           ☰ Controles
         </button>
         <div className="flex items-center gap-2 rounded-[4px] border border-[#7fe3d930] bg-[#13252abf] px-2.5 py-2 text-11 tracking-[.12em] text-accent compact:text-9">
-          <span className={`size-[5px] rounded-full ${paused ? 'bg-[#98a7b7]' : 'bg-accent'}`} />
-          <span>{paused ? 'EN PAUSA' : 'EN MOVIMIENTO'}</span>
+          <span
+            className={`size-[5px] rounded-full ${paused && !mirroring ? 'bg-[#98a7b7]' : 'bg-accent'}`}
+          />
+          <span>{mirroring ? 'PANEL REAL' : paused ? 'EN PAUSA' : 'EN MOVIMIENTO'}</span>
         </div>
         <span className="text-12 tracking-[.09em] text-[#a0b0c3] medium:hidden">
           PANAL SOFIA <span className="ml-[7px] text-[#5c7087]">/ 16 × 2 GDL</span>
         </span>
+        {(linkState === 'online' || linkState === 'unresponsive') && (
+          <button
+            className="pointer-events-auto ml-auto border-[#ff6b4a] bg-[#5a1f1a] px-4 font-semibold tracking-[.08em] text-[#ffd9cf] hover:bg-[#7a2a22] compact:ml-0"
+            title="Detener el panel real"
+            onClick={stopPanel}
+          >
+            STOP
+          </button>
+        )}
       </div>
       <ViewTools />
       <CollisionAlert />

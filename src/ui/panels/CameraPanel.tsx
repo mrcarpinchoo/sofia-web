@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import type { CameraActivity, CameraKind } from '../../perception/CameraTracker';
+import { GESTURES } from '../../perception/gestures';
 import type { Framing } from '../../perception/gestures';
 import { engine, useLab } from '../../state/store';
 import { Check } from '../common/Check';
@@ -11,18 +12,6 @@ import { Segmented } from '../common/Segmented';
 const KINDS: { value: CameraKind; label: string }[] = [
   { value: 'body', label: 'Personas' },
   { value: 'hand', label: 'Gestos de mano' },
-];
-
-const GESTURES = [
-  { name: '✋ Palma abierta', description: 'Saludo lateral.' },
-  { name: '✊ Puño cerrado', description: 'Mirada al centro.' },
-  { name: '✌ V de victoria', description: 'Baile en ocho.' },
-  { name: '☝ Índice arriba', description: 'Asentimiento vertical.' },
-  {
-    name: '♡ Corazón con dos manos',
-    description:
-      'Une índices arriba y pulgares abajo, dejando un hueco de corazón. Se activa una ola de inclinaciones que sale del centro y llega a los paneles de alrededor. Se repite aunque retires las manos, hasta reconocer otro gesto; las bases conservan el acomodo de panal.',
-  },
 ];
 
 const START_LABELS: Record<CameraActivity, string> = {
@@ -74,18 +63,23 @@ function HandSettings() {
   return (
     <div>
       <Hint>
-        Para los primeros cuatro gestos muestra una mano; para el corazón, las dos. Mantén el gesto
-        al menos medio segundo para activarlo. Después puedes retirar las manos: el movimiento
-        continúa hasta reconocer otro gesto o apagar la cámara.
+        Los mismos gestos que <code>sofia-tracker</code>, con una mano. Cada gesto reproduce su
+        movimiento una vez; entre gestos, el panal sigue la mano y, sin mano, conserva la pose.
       </Hint>
       <dl className="my-3 text-14">
-        {GESTURES.map(({ name, description }) => (
-          <Fragment key={name}>
-            <dt className="mt-2.5 text-[#d5e0ed]">{name}</dt>
-            <dd className="mt-[3px] text-13 text-muted">{description}</dd>
+        {Object.entries(GESTURES).map(([key, { name, motion, help }]) => (
+          <Fragment key={key}>
+            <dt className="mt-2.5 text-[#d5e0ed]">
+              {name} <span className="text-muted">→ {motion}</span>
+            </dt>
+            <dd className="mt-[3px] text-13 text-muted">{help}</dd>
           </Fragment>
         ))}
       </dl>
+      <Hint size="small">
+        Con el panel real conectado y el control en este navegador, los gestos y la mano también se
+        envían al Maestro.
+      </Hint>
       <Hint>{gestureLabel}</Hint>
     </div>
   );
@@ -126,8 +120,7 @@ export function CameraPanel() {
       </Hint>
       <Hint size="small">
         Solicita permiso solo al activarla. Procesamiento local; no se envían imágenes ni se usa el
-        micrófono. En Personas, perder la detección conserva la pose. En Gestos, el último movimiento
-        continúa en bucle hasta reconocer otro gesto o apagar la cámara.
+        micrófono. Perder la detección conserva la pose.
       </Hint>
     </Section>
   );

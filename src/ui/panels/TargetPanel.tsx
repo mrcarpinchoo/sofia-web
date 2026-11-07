@@ -16,7 +16,7 @@ const MODE_HINTS: Record<TargetMode, string> = {
   auto: 'Los paneles siguen la esfera roja.',
   cursor: 'Mueve el cursor sobre la escena. La esfera se mueve en el plano de profundidad elegido.',
   camera:
-    'Activa la cámara en el apartado 04. Los gestos quedan en bucle hasta reconocer otro; Personas se detiene al perderte.',
+    'Activa la cámara en el apartado 04. Personas sigue tu cuerpo; Gestos sigue la mano y reproduce cada gesto una vez.',
 };
 
 export function TargetPanel() {

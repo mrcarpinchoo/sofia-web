@@ -1,10 +1,10 @@
-// Turns MediaPipe landmarks into targets: the body's center and the five
-// recognized gestures.
+// Turns MediaPipe landmarks into targets: the body's center, the hand's
+// position and the six gestures of sofia-tracker (recognised by
+// handRecognizer.ts).
 
+import type { TrackerGesture } from '../core/choreography';
 import { clamp } from '../core/math';
 import type { Vec2, Vec3 } from '../core/types';
-
-export type GestureName = 'Open_Palm' | 'Closed_Fist' | 'Victory' | 'Heart' | 'Pointing_Up';
 
 /** Minimal landmark shape shared by the pose and hand models. */
 export interface Landmark {
@@ -15,55 +15,62 @@ export interface Landmark {
 
 export type Framing = 'upper' | 'full';
 
-export const GESTURES: Record<GestureName, { name: string; motion: string; help: string }> = {
-  Open_Palm: {
+/**
+ * sofia-tracker's gestures: the GESTURE command ID (PROTOCOL.md §6.4), and
+ * the texts shown to the user.
+ */
+export const GESTURES: Record<
+  TrackerGesture,
+  { id: 1 | 2 | 3 | 4 | 5 | 6; name: string; motion: string; help: string }
+> = {
+  INDEX: {
+    id: 1,
+    name: 'Índice',
+    motion: 'mirar arriba, luego abajo',
+    help: 'Extiende solo el índice y mantén la mano quieta medio segundo.',
+  },
+  V: {
+    id: 2,
+    name: 'V',
+    motion: 'dibujar un 8 horizontal',
+    help: 'Extiende índice y medio, recoge los demás y mantén la mano quieta medio segundo.',
+  },
+  PALM: {
+    id: 3,
     name: 'Palma abierta',
-    motion: 'Saludo lateral',
-    help: 'Abre los cinco dedos y muestra la palma.',
+    motion: 'mirar a la derecha, luego a la izquierda',
+    help: 'Abre los cinco dedos y mantén la mano quieta medio segundo.',
   },
-  Closed_Fist: {
-    name: 'Puño cerrado',
-    motion: 'Mirada al centro',
-    help: 'Cierra los dedos formando un puño.',
+  SWIPE_LEFT: {
+    id: 4,
+    name: 'Barrido a la izquierda',
+    motion: 'ola hacia la izquierda',
+    help: 'Desliza la mano rápido hacia tu izquierda.',
   },
-  Victory: {
-    name: 'V de victoria',
-    motion: 'Baile en ocho',
-    help: 'Extiende índice y medio; recoge los demás.',
+  SWIPE_RIGHT: {
+    id: 5,
+    name: 'Barrido a la derecha',
+    motion: 'ola hacia la derecha',
+    help: 'Desliza la mano rápido hacia tu derecha.',
   },
-  Heart: {
-    name: 'Corazón con dos manos',
-    motion: 'Ola del centro hacia afuera',
-    help: 'Une las puntas de ambos índices arriba y de ambos pulgares abajo, dejando un hueco de corazón.',
-  },
-  Pointing_Up: {
-    name: 'Índice arriba',
-    motion: 'Asentimiento vertical',
-    help: 'Extiende solo el índice apuntando hacia arriba.',
+  GRAB: {
+    id: 6,
+    name: 'Agarre',
+    motion: 'sobresalto y volver al reposo',
+    help: 'Pasa de la palma abierta al puño en menos de medio segundo.',
   },
 };
 
-export const isGesture = (name: string | null | undefined): name is GestureName =>
-  Object.hasOwn(GESTURES, name ?? '');
+// The hand target, as the Maestro maps SET_TARGET (sofia-firmware config.h):
+// the image edges are ±230 mm from the panel's centre.
+const HAND_SPAN_MM = 230;
 
-/** Minimum classifier confidence for a gesture to count. */
-export const MIN_GESTURE_SCORE = 0.65;
-
-/** How long a gesture must be held before it fires, in ms. */
-export const GESTURE_HOLD_MS = 450;
-
-export function gestureTarget(name: GestureName, t: number, depth: number): Vec3 {
-  const a = (t * 2 * Math.PI) / 4;
-  switch (name) {
-    case 'Open_Palm':
-      return [190 * Math.sin(a), 0, depth];
-    case 'Victory':
-      return [160 * Math.sin(a), 100 * Math.sin(2 * a), depth];
-    case 'Pointing_Up':
-      return [0, 140 * Math.sin(a), depth];
-    default:
-      return [0, 0, depth];
-  }
+/**
+ * Target for the hand's position: `point` is the smoothed palm centroid,
+ * 0-1 in the mirrored image (y down), as sofia-tracker reports it.
+ */
+export function handTarget(point: Vec2, depth: number): Vec3 {
+  return [(2 * point[0] - 1) * HAND_SPAN_MM, (1 - 2 * point[1]) * HAND_SPAN_MM, depth];
 }
 
 const visible = (p: Landmark | undefined): p is Landmark =>
@@ -107,36 +114,4 @@ export function imageTarget(
     clamp((center[1] - point[1]) * 800 * gain, -550, 550),
     depth,
   ];
-}
-
-/** Fires a gesture once it has been held long enough, and only once. */
-export class GestureLatch {
-  candidate: GestureName | null = null;
-  since = 0;
-  active: GestureName | null = null;
-  lastSeen = -Infinity;
-
-  reset() {
-    this.candidate = null;
-    this.since = 0;
-    this.active = null;
-    this.lastSeen = -Infinity;
-  }
-
-  update(name: string | undefined, score: number, now: number): GestureName | null {
-    if (!isGesture(name) || score < MIN_GESTURE_SCORE) {
-      this.candidate = null;
-      return null;
-    }
-    this.lastSeen = now;
-    if (this.candidate !== name) {
-      this.candidate = name;
-      this.since = now;
-    }
-    if (now - this.since >= GESTURE_HOLD_MS && this.active !== name) {
-      this.active = name;
-      return name;
-    }
-    return null;
-  }
 }

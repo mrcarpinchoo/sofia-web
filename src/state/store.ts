@@ -8,7 +8,11 @@ import type { FilterParam, FilterParams, FilterType } from '../core/filters';
 import { DEFAULT_SPACING, safeSpacing } from '../core/kinematics';
 import type { TrajectoryType } from '../core/trajectories';
 import type { LimitPolicy } from '../core/types';
+import { MaestroLink } from '../hardware/MaestroLink';
+import type { LinkSnapshot } from '../hardware/MaestroLink';
+import type { GestureId } from '../hardware/protocol';
 import type { CameraActivity, CameraKind } from '../perception/CameraTracker';
+import { GESTURES } from '../perception/gestures';
 import type { Framing } from '../perception/gestures';
 import { PageRecorder } from '../recording/pageRecorder';
 import type { ViewName } from '../scene/SofiaScene';
@@ -50,6 +54,12 @@ interface LabStore {
   cameraPoints: number;
   gestureLabel: string;
 
+  // Real panel (Maestro link)
+  linkHost: string;
+  link: LinkSnapshot;
+  /** The 3D view shows the real panel's angles instead of the simulation. */
+  mirroring: boolean;
+
   // Page
   controlsOpen: boolean;
   controlTab: ControlTab;
@@ -84,6 +94,17 @@ interface LabStore {
   setMirror: (mirror: boolean) => void;
   setCameraGain: (gain: number) => void;
 
+  setLinkHost: (host: string) => void;
+  connectLink: () => void;
+  disconnectLink: () => void;
+  armPanel: () => void;
+  stopPanel: () => void;
+  offPanel: () => void;
+  playGesture: (id: GestureId, name: string) => void;
+  /** Camera point, 0-1 (mirrored, y down); repeated until endPanelTarget. */
+  aimPanel: (x: number, y: number) => void;
+  endPanelTarget: () => void;
+
   setControlsOpen: (open: boolean) => void;
   showTab: (tab: ControlTab) => void;
   setNotesOpen: (open: boolean) => void;
@@ -100,11 +121,43 @@ export const engine = new LabEngine({
   onCameraActivity: (cameraActivity) => useLab.setState({ cameraActivity }),
   onCameraStatus: (cameraStatus, cameraPoints) => useLab.setState({ cameraStatus, cameraPoints }),
   onGestureLabel: (gestureLabel) => useLab.setState({ gestureLabel }),
-  onHeart: () => {
-    lab().setView('front');
-    lab().showToast('Corazón: ola del centro hacia afuera, conservando el panal.');
+  // The camera also drives the real panel while this browser controls it,
+  // sending what sofia-tracker sends: the gesture and the hand's position.
+  onGesture: (name) => {
+    if (controlsPanel()) link.gesture(GESTURES[name].id, name);
+  },
+  onHand: (point) => {
+    if (!controlsPanel()) return;
+    if (point) link.setTarget(...point);
+    else link.endTarget();
   },
 });
+
+function controlsPanel() {
+  const { link: snapshot } = lab();
+  return snapshot.state === 'online' && Boolean(snapshot.status?.isController);
+}
+
+/** Why the Maestro rejected a command, as the user should read it. */
+const REJECTIONS: Record<string, string> = {
+  NOT_CONTROLLER: 'otro cliente tiene el control. Pulsa ARMAR cuando quede libre.',
+  BUSY: 'hay un gesto en curso.',
+  INTERNAL: 'las placas PWM no responden. Revisa el cableado y la alimentación.',
+  BAD_PAYLOAD: 'valor fuera de rango.',
+};
+
+export const link = new MaestroLink({
+  onChange: (snapshot) => useLab.setState({ link: snapshot }),
+  onAngles: (angles) => {
+    engine.showRealPanel(angles);
+    const mirroring = angles !== null;
+    if (lab().mirroring !== mirroring) useLab.setState({ mirroring });
+  },
+  onRejected: (command, reason) =>
+    lab().showToast(`${command}: ${REJECTIONS[reason] ?? reason}`),
+});
+// Hot reload creates a new link; close the old socket so it releases control.
+import.meta.hot?.dispose(() => link.dispose());
 
 export const recorder = new PageRecorder({
   onToast: (message) => lab().showToast(message),
@@ -139,6 +192,10 @@ export const useLab = create<LabStore>()((set, get) => ({
   cameraStatus: 'Cámara apagada.',
   cameraPoints: 0,
   gestureLabel: 'Esperando un gesto.',
+
+  linkHost: '192.168.4.1:81',
+  link: { state: 'disconnected', firmware: null, status: null, p95: null, within500: null },
+  mirroring: false,
 
   controlsOpen: window.innerWidth >= PHONE_WIDTH,
   controlTab: 'target',
@@ -232,6 +289,19 @@ export const useLab = create<LabStore>()((set, get) => ({
     engine.setCameraGain(cameraGain);
     set({ cameraGain });
   },
+
+  setLinkHost: (linkHost) => set({ linkHost }),
+  connectLink: () => {
+    const host = get().linkHost.trim().replace(/^wss?:\/\//, '').replace(/\/+$/, '');
+    link.connect(`ws://${host}/`);
+  },
+  disconnectLink: () => link.disconnect(),
+  armPanel: () => link.arm(),
+  stopPanel: () => link.stop(),
+  offPanel: () => link.off(),
+  playGesture: (id, name) => link.gesture(id, name),
+  aimPanel: (x, y) => link.setTarget(x, y),
+  endPanelTarget: () => link.endTarget(),
 
   setControlsOpen: (controlsOpen) => set({ controlsOpen }),
   showTab: (controlTab) => set({ controlTab, controlsOpen: true }),
