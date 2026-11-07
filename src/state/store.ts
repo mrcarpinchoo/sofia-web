@@ -11,19 +11,15 @@ import type { LimitPolicy } from '../core/types';
 import { MaestroLink } from '../hardware/MaestroLink';
 import type { LinkSnapshot } from '../hardware/MaestroLink';
 import type { GestureId } from '../hardware/protocol';
-import type { CameraActivity, CameraKind } from '../perception/CameraTracker';
+import type { CameraActivity } from '../perception/CameraTracker';
 import { GESTURES } from '../perception/gestures';
-import type { Framing } from '../perception/gestures';
-import { PageRecorder } from '../recording/pageRecorder';
 import type { ViewName } from '../scene/SofiaScene';
 import { LabEngine } from '../simulation/LabEngine';
 import { DEFAULT_LIMIT } from '../simulation/Simulation';
 import type { TargetMode } from '../simulation/targets';
 
-export type ControlTab = 'target' | 'response' | 'model' | 'camera' | 'link';
 
 const TOAST_MS = 4500;
-const PHONE_WIDTH = 760;
 
 interface LabStore {
   // Simulation settings
@@ -45,10 +41,6 @@ interface LabStore {
   paused: boolean;
 
   // Camera
-  cameraKind: CameraKind;
-  framing: Framing;
-  mirror: boolean;
-  cameraGain: number;
   cameraActivity: CameraActivity;
   cameraStatus: string;
   cameraPoints: number;
@@ -62,11 +54,8 @@ interface LabStore {
 
   // Page
   controlsOpen: boolean;
-  controlTab: ControlTab;
   notesOpen: boolean;
   toast: string | null;
-  recording: boolean;
-  recordBusy: boolean;
   sceneError: string | null;
 
   setMode: (mode: TargetMode) => void;
@@ -89,10 +78,6 @@ interface LabStore {
 
   startCamera: () => void;
   stopCamera: () => void;
-  setCameraKind: (kind: CameraKind) => void;
-  setFraming: (framing: Framing) => void;
-  setMirror: (mirror: boolean) => void;
-  setCameraGain: (gain: number) => void;
 
   setLinkHost: (host: string) => void;
   connectLink: () => void;
@@ -106,10 +91,8 @@ interface LabStore {
   endPanelTarget: () => void;
 
   setControlsOpen: (open: boolean) => void;
-  showTab: (tab: ControlTab) => void;
   setNotesOpen: (open: boolean) => void;
   showToast: (message: string) => void;
-  toggleRecording: () => void;
   setSceneError: (message: string) => void;
 }
 
@@ -159,13 +142,6 @@ export const link = new MaestroLink({
 // Hot reload creates a new link; close the old socket so it releases control.
 import.meta.hot?.dispose(() => link.dispose());
 
-export const recorder = new PageRecorder({
-  onToast: (message) => lab().showToast(message),
-  onPreparing: () => lab().setControlsOpen(true),
-  onRecording: (recording) => useLab.setState({ recording }),
-  onBusy: (recordBusy) => useLab.setState({ recordBusy }),
-});
-
 export const useLab = create<LabStore>()((set, get) => ({
   mode: 'auto',
   path: 'eight',
@@ -184,10 +160,6 @@ export const useLab = create<LabStore>()((set, get) => ({
   view: 'iso',
   paused: false,
 
-  cameraKind: 'body',
-  framing: 'upper',
-  mirror: true,
-  cameraGain: 1,
   cameraActivity: 'off',
   cameraStatus: 'Cámara apagada.',
   cameraPoints: 0,
@@ -197,12 +169,9 @@ export const useLab = create<LabStore>()((set, get) => ({
   link: { state: 'disconnected', firmware: null, status: null, p95: null, within500: null },
   mirroring: false,
 
-  controlsOpen: window.innerWidth >= PHONE_WIDTH,
-  controlTab: 'target',
+  controlsOpen: true,
   notesOpen: false,
   toast: null,
-  recording: false,
-  recordBusy: false,
   sceneError: null,
 
   setMode: (mode) => {
@@ -273,22 +242,6 @@ export const useLab = create<LabStore>()((set, get) => ({
     set({ mode: 'camera' });
   },
   stopCamera: () => engine.stopCamera(),
-  setCameraKind: (cameraKind) => {
-    engine.setCameraKind(cameraKind, get().cameraActivity !== 'off');
-    set({ cameraKind });
-  },
-  setFraming: (framing) => {
-    engine.setFraming(framing);
-    set({ framing });
-  },
-  setMirror: (mirror) => {
-    engine.setMirror(mirror);
-    set({ mirror });
-  },
-  setCameraGain: (cameraGain) => {
-    engine.setCameraGain(cameraGain);
-    set({ cameraGain });
-  },
 
   setLinkHost: (linkHost) => set({ linkHost }),
   connectLink: () => {
@@ -304,13 +257,11 @@ export const useLab = create<LabStore>()((set, get) => ({
   endPanelTarget: () => link.endTarget(),
 
   setControlsOpen: (controlsOpen) => set({ controlsOpen }),
-  showTab: (controlTab) => set({ controlTab, controlsOpen: true }),
   setNotesOpen: (notesOpen) => set({ notesOpen }),
   showToast: (toast) => {
     set({ toast });
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => set({ toast: null }), TOAST_MS);
   },
-  toggleRecording: () => void recorder.toggle(),
   setSceneError: (sceneError) => set({ sceneError }),
 }));

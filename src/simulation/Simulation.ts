@@ -25,8 +25,7 @@ import type {
   Vec2,
   Vec3,
 } from '../core/types';
-import { handTarget, imageTarget } from '../perception/gestures';
-import type { CameraKind } from '../perception/CameraTracker';
+import { handTarget } from '../perception/gestures';
 import { TargetInputs } from './targets';
 import type { TargetMode } from './targets';
 
@@ -38,9 +37,6 @@ export const DEFAULT_LIMIT = 30;
 
 /** Time constant of the camera target's smoothing, in s. */
 const CAMERA_SMOOTHING = 0.12;
-
-/** The pose freezes this long after losing the person, in ms. */
-export const DETECTION_FREEZE_MS = 800;
 
 /** Without a hand for this long the pose holds, as on the Maestro, in ms. */
 const HAND_HOLD_MS = 500;
@@ -78,11 +74,6 @@ export interface SimulationState {
   selected: number;
   rays: boolean;
   ideal: boolean;
-  cameraKind: CameraKind;
-  cameraPoint: Vec2 | null;
-  cameraCenter: Vec2;
-  cameraGain: number;
-  mirror: boolean;
   lastCameraSeen: number;
   /** Smoothed palm centroid, 0-1 in the mirrored image (hand mode). */
   handPoint: Vec2 | null;
@@ -116,11 +107,6 @@ export class Simulation {
     selected: 7,
     rays: true,
     ideal: false,
-    cameraKind: 'body',
-    cameraPoint: null,
-    cameraCenter: [0.5, 0.45],
-    cameraGain: 1,
-    mirror: true,
     lastCameraSeen: -Infinity,
     handPoint: null,
     gesture: null,
@@ -140,11 +126,6 @@ export class Simulation {
   constructor(isCameraRunning: () => boolean) {
     this.isCameraRunning = isCameraRunning;
     this.createUnits();
-  }
-
-  /** Each unit's commanded joint angles, in rad. */
-  get jointAngles(): readonly Readonly<JointAngles>[] {
-    return this.units.map((unit) => unit.q);
   }
 
   createUnits() {
@@ -188,28 +169,20 @@ export class Simulation {
     if (state.mode === 'auto') state.phase += DT * state.speed;
     state.target = this.inputs.sample(state.mode, state);
 
-    // Hand mode works like the Maestro: a gesture plays once, and between
+    // The camera works like the Maestro: a gesture plays once, and between
     // gestures the panel follows the hand; without a hand it holds.
-    const hand = state.mode === 'camera' && state.cameraKind === 'hand';
-    if (state.gesture && (!hand || state.t - state.gestureStart >= duration(state.gesture))) {
+    const camera = state.mode === 'camera';
+    if (state.gesture && (!camera || state.t - state.gestureStart >= duration(state.gesture))) {
       state.gesture = null;
     }
-    const playing = hand ? state.gesture : null;
+    const playing = camera ? state.gesture : null;
     const frozen =
-      state.mode === 'camera' &&
+      camera &&
       !playing &&
-      (!this.isCameraRunning() ||
-        now - state.lastCameraSeen > (hand ? HAND_HOLD_MS : DETECTION_FREEZE_MS));
+      (!this.isCameraRunning() || now - state.lastCameraSeen > HAND_HOLD_MS);
 
-    if (state.mode === 'camera' && !frozen && !playing) {
-      const goal = hand
-          ? handTarget(state.handPoint as Vec2, state.depth)
-          : imageTarget(state.cameraPoint as Vec2, {
-              mirror: state.mirror,
-              gain: state.cameraGain,
-              depth: state.depth,
-              center: state.cameraCenter,
-            });
+    if (camera && !frozen && !playing) {
+      const goal = handTarget(state.handPoint as Vec2, state.depth);
       const a = 1 - Math.exp(-DT / CAMERA_SMOOTHING);
       state.target = [
         state.target[0] + a * (goal[0] - state.target[0]),
@@ -274,7 +247,6 @@ export class Simulation {
         config.policy,
         JSON.stringify(params),
         String(config.spacing),
-        state.mode === 'camera' ? state.cameraKind : '',
         state.mode === 'camera' ? (state.gesture ?? '') : '',
         String(Number(frozen)),
       ]),

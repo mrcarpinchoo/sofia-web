@@ -10,15 +10,14 @@ import { RAD, clamp } from '../core/math';
 import type { TrajectoryType } from '../core/trajectories';
 import type { LimitPolicy } from '../core/types';
 import { CameraTracker } from '../perception/CameraTracker';
-import type { CameraActivity, CameraKind } from '../perception/CameraTracker';
+import type { CameraActivity } from '../perception/CameraTracker';
 import type { TrackerGesture } from '../core/choreography';
 import type { Vec2 } from '../core/types';
 import { GESTURES } from '../perception/gestures';
-import type { Framing } from '../perception/gestures';
 import { SofiaScene } from '../scene/SofiaScene';
 import type { ViewName } from '../scene/SofiaScene';
 import { download, toCsv } from './csv';
-import { DETECTION_FREEZE_MS, DT, HISTORY_LENGTH, Simulation } from './Simulation';
+import { DT, HISTORY_LENGTH, Simulation } from './Simulation';
 import type { Unit } from './Simulation';
 import type { TargetMode } from './targets';
 
@@ -76,10 +75,6 @@ export class LabEngine {
     this.camera = new CameraTracker({
       onStatus: (message) => this.cameraStatus(message),
       onActive: (activity) => this.cameraActivity(activity),
-      onBody: (point, time) => {
-        this.sim.state.cameraPoint = point;
-        this.sim.state.lastCameraSeen = time;
-      },
       onHand: (point, time) => this.hand(point, time),
       onGesture: (name) => this.gesture(name),
     });
@@ -309,55 +304,11 @@ export class LabEngine {
     const { state } = this.sim;
     this.setMode('camera');
     state.lastCameraSeen = -Infinity;
-    void this.camera.start(state.cameraKind);
+    void this.camera.start();
   }
 
   stopCamera() {
     this.camera.stop();
-  }
-
-  setCameraKind(kind: CameraKind, restart: boolean) {
-    const { state } = this.sim;
-    state.cameraKind = kind;
-    state.lastCameraSeen = -Infinity;
-    state.gesture = null;
-    state.handPoint = null;
-    state.cameraPoint = null;
-    this.camera.lastCenter = null;
-    this.camera.recognizer.reset();
-    this.events.onGestureLabel(NO_GESTURE);
-    if (restart) void this.camera.start(kind);
-  }
-
-  setFraming(framing: Framing) {
-    const { state } = this.sim;
-    this.camera.framing = framing;
-    this.camera.lastCenter = null;
-    state.cameraCenter = [0.5, 0.45];
-    state.lastCameraSeen = -Infinity;
-  }
-
-  setMirror(mirror: boolean) {
-    this.sim.state.mirror = mirror;
-  }
-
-  setCameraGain(gain: number) {
-    this.sim.state.cameraGain = gain;
-  }
-
-  /** Makes the person's current position the center of the panel. */
-  centerCamera() {
-    const { state } = this.sim;
-    if (
-      state.cameraKind !== 'body' ||
-      !state.cameraPoint ||
-      performance.now() - state.lastCameraSeen > DETECTION_FREEZE_MS
-    ) {
-      this.events.onToast('Activa el seguimiento y muestra tus hombros antes de centrar.');
-      return;
-    }
-    state.cameraCenter = [...state.cameraPoint];
-    this.events.onToast('Tu posición actual corresponde al centro del panal.');
   }
 
   private rebuild() {

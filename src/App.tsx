@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { engine, recorder, useLab } from './state/store';
+import { engine, useLab } from './state/store';
 import { NotesDialog } from './ui/common/NotesDialog';
 import { Toast } from './ui/common/Toast';
 import { Header } from './ui/layout/Header';
@@ -20,7 +20,6 @@ export function App() {
     }
     function leavePage() {
       engine.camera.stop(false);
-      recorder.shutdown();
     }
     function hidePage() {
       if (document.hidden && useLab.getState().cameraActivity !== 'off') engine.camera.stop();
@@ -38,7 +37,7 @@ export function App() {
   return (
     <>
       <Header />
-      <div className="flex h-[calc(100dvh-var(--header-height))] phone:flex-col">
+      <div className="flex h-[calc(100dvh-var(--header-height))]">
         <Sidebar />
         <StageView />
       </div>

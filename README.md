@@ -1,8 +1,8 @@
 # SOFIA Web
 
 The SOFIA kinematic lab as a web app: a 3D simulation of the 16-unit panel,
-selectable joint filters, and body and gesture tracking from the webcam. It
-runs entirely in the browser and also works on a phone.
+selectable joint filters, and hand tracking and gestures from the webcam. It
+runs entirely in the browser, on a laptop or desktop.
 
 Panel 00 also controls the real panel over Wi‑Fi through the SOFIA Maestro
 (the ESP32 in `sofia-firmware`); see [Real panel](#real-panel).
@@ -10,7 +10,7 @@ Panel 00 also controls the real panel over Wi‑Fi through the SOFIA Maestro
 ## Requirements
 
 - Node.js 22.12 or newer and [pnpm](https://pnpm.io).
-- A browser with WebGL. Chrome or Edge are needed to record the page.
+- A browser with WebGL.
 - Internet once, during `pnpm install`. After that the app needs none.
 
 ## Setup
@@ -20,9 +20,9 @@ pnpm install
 ```
 
 This also runs `scripts/fetch-assets.mjs`, which puts the MediaPipe wasm and
-the two detection models in `public/mediapipe/` (about 33 MB, gitignored). If
-the download fails, everything but the camera still works; run
-`node scripts/fetch-assets.mjs` again with internet.
+the hand model (the same as `sofia-tracker`'s) in `public/mediapipe/` (about
+27 MB, gitignored). If the download fails, everything but the camera still
+works; run `node scripts/fetch-assets.mjs` again with internet.
 
 ## Usage
 
@@ -33,21 +33,9 @@ pnpm preview        # serve the build at http://localhost:4173
 pnpm lint           # ESLint
 ```
 
-### On a phone
-
-Connect the phone to the same network as the computer, then:
-
-```bash
-pnpm dev:phone
-```
-
-Open the `https://` Network address it prints on the phone, and accept the
-certificate warning. The certificate is self-signed; HTTPS is needed because
-phones block the camera on plain `http://`.
-
-Below 760 px the controls become a bottom sheet with tabs. One finger orbits
-the view and a pinch zooms. In Cursor mode one finger moves the target and two
-fingers orbit.
+The camera needs `http://localhost` or HTTPS; `pnpm dev` and `pnpm preview`
+serve on localhost. On a touchscreen, one finger orbits the view and a pinch
+zooms; in Cursor mode one finger moves the target and two fingers orbit.
 
 ## Files
 
@@ -64,7 +52,6 @@ fingers orbit.
   target sources and `csv.ts` the data export.
 - `src/scene/`: `SofiaScene`, the three.js view, including mouse and touch
   input.
-- `src/recording/`: records the browser tab to a video.
 - `src/hardware/`: the link to the Maestro. `protocol.ts` encodes and decodes
   frames (mirrors `sofia-firmware/src/protocol.h`); `MaestroLink` is the
   WebSocket client.
@@ -72,7 +59,7 @@ fingers orbit.
   the engine and the link.
 - `src/ui/`: React components. `panels/` are the control sections, `stage/` what
   sits over the 3D view, `layout/` the page frame and `common/` shared pieces.
-- `src/styles/app.css`: Tailwind setup. It holds the theme (colors, text sizes), the layout variants (`wide`, `medium`, `short`, `low`, `compact`, `phone`) and the default look of buttons and form fields. Everything else is utility classes on the components.
+- `src/styles/app.css`: Tailwind setup. It holds the theme (colors, text sizes), the layout variants (`wide`, `medium`, `low`) and the default look of buttons and form fields. Everything else is utility classes on the components.
 - `scripts/fetch-assets.mjs`: fetches the MediaPipe assets.
 
 The simulation runs outside React. React renders the settings from the store,
@@ -98,7 +85,7 @@ two-hand heart, from MediaPipe's gesture recognizer) were replaced by
 
 ## Hand gestures
 
-In panel 04, **Gestos de mano** recognises the same six gestures as
+Panel 04 (Cámara · gestos de mano) recognises the same six gestures as
 `sofia-tracker` (INDEX, V, PALM, SWIPE_LEFT, SWIPE_RIGHT, GRAB) with the same
 model and rules, and the panel behaves like the Maestro: each gesture plays its
 motion once, between gestures the panel follows the hand, and without a hand
@@ -123,8 +110,8 @@ The Maestro creates the Wi‑Fi network `SOFIA-Maestro` (password
 2. Open `http://localhost:5173`, panel **00 Panel real · Wi‑Fi**, and press
    **Conectar**.
 
-The page must be served over plain HTTP: an `https://` page (such as
-`pnpm dev:phone`) can't open a `ws://` connection, and the panel says so.
+The page must be served over plain HTTP (as `pnpm dev` does): an `https://`
+page can't open a `ws://` connection.
 
 What the panel does:
 
@@ -146,5 +133,5 @@ What the panel does:
   share answered within 500 ms, for the paper's targets (≤ 250 ms and
   ≥ 99 %).
 
-With the camera in **Gestos de mano** (panel 04), recognised gestures and
+With the camera on (panel 04), recognised gestures and
 the hand's position are sent too; see [Hand gestures](#hand-gestures).

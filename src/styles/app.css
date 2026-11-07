@@ -1,19 +1,11 @@
 @import 'tailwindcss';
 
-/* Layout variants. They're emitted in this order, so later ones win: the small
-   screen rules must stay last. `phone` matches ui/common/useIsPhone.ts. */
+/* Layout variants for laptop and desktop windows. They're emitted in this
+   order, so later ones win. */
 @custom-variant wide (@media (min-width: 1500px));
 @custom-variant medium (@media (max-width: 1100px));
-@custom-variant short (@media (max-height: 650px) and (min-width: 761px));
+/* Short windows */
 @custom-variant low (@media (max-height: 650px));
-/* Small screens in either orientation: phones held sideways are short, not narrow. */
-@custom-variant compact {
-  @media (max-width: 760px), (max-height: 500px) {
-    @slot;
-  }
-}
-/* Upright phones, where the controls become a bottom sheet. */
-@custom-variant phone (@media (max-width: 760px));
 
 @theme {
   --font-sans:
@@ -115,26 +107,5 @@
     height: 20px;
     cursor: pointer;
     accent-color: var(--color-accent);
-  }
-
-  @variant compact {
-    :root {
-      --header-height: calc(60px + env(safe-area-inset-top));
-    }
-
-    /* Touch targets */
-    button,
-    select,
-    input[type='number'] {
-      min-height: 44px;
-    }
-    /* iOS zooms the page when focusing anything smaller than 16 px. */
-    select,
-    input[type='number'] {
-      font-size: 16px;
-    }
-    input[type='range'] {
-      height: 32px;
-    }
   }
 }

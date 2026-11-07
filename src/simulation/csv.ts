@@ -23,7 +23,6 @@ const HEADER = [
   'politica',
   'parametros_filtro',
   'separacion_mm',
-  'modo_camara',
   'gesto',
   'pose_retenida_por_camara',
 ];

@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { engine, useLab } from '../../state/store';
-import { useIsPhone } from '../common/useIsPhone';
 import { CollisionAlert } from './CollisionAlert';
 import { TelemetryCard } from './TelemetryCard';
 import { Transport } from './Transport';
 import { ViewTools } from './ViewTools';
 
 const TOUCH = window.matchMedia('(pointer: coarse)').matches;
-const SEPARATOR = 'mx-[7px] compact:mx-[3px]';
+const SEPARATOR = 'mx-[7px]';
 
 export function StageView() {
   const stage = useRef<HTMLDivElement>(null);
@@ -20,7 +19,6 @@ export function StageView() {
   const mirroring = useLab((s) => s.mirroring);
   const linkState = useLab((s) => s.link.state);
   const stopPanel = useLab((s) => s.stopPanel);
-  const phone = useIsPhone();
 
   useEffect(() => {
     if (!stage.current) return;
@@ -35,7 +33,7 @@ export function StageView() {
   }, [setSceneError]);
 
   return (
-    <main className="relative min-w-0 flex-1 overflow-hidden bg-[#101823] phone:order-1 phone:min-h-0">
+    <main className="relative min-w-0 flex-1 overflow-hidden bg-[#101823]">
       <div
         className="absolute inset-0 outline-none [&_canvas]:block [&_canvas]:size-full [&_canvas]:touch-none"
         ref={stage}
@@ -49,16 +47,16 @@ export function StageView() {
       >
         {sceneError}
       </div>
-      <div className="pointer-events-none absolute top-5.5 right-6 left-6 flex items-center gap-4 medium:left-4 compact:top-3 compact:right-3 compact:left-3 compact:gap-2">
+      <div className="pointer-events-none absolute top-5.5 right-6 left-6 flex items-center gap-4 medium:left-4">
         <button
           className="pointer-events-auto"
           aria-label="Mostrar controles"
-          hidden={controlsOpen || phone}
+          hidden={controlsOpen}
           onClick={() => setControlsOpen(true)}
         >
           ☰ Controles
         </button>
-        <div className="flex items-center gap-2 rounded-[4px] border border-[#7fe3d930] bg-[#13252abf] px-2.5 py-2 text-11 tracking-[.12em] text-accent compact:text-9">
+        <div className="flex items-center gap-2 rounded-[4px] border border-[#7fe3d930] bg-[#13252abf] px-2.5 py-2 text-11 tracking-[.12em] text-accent">
           <span
             className={`size-[5px] rounded-full ${paused && !mirroring ? 'bg-[#98a7b7]' : 'bg-accent'}`}
           />
@@ -69,7 +67,7 @@ export function StageView() {
         </span>
         {(linkState === 'online' || linkState === 'unresponsive') && (
           <button
-            className="pointer-events-auto ml-auto border-[#ff6b4a] bg-[#5a1f1a] px-4 font-semibold tracking-[.08em] text-[#ffd9cf] hover:bg-[#7a2a22] compact:ml-0"
+            className="pointer-events-auto ml-auto border-[#ff6b4a] bg-[#5a1f1a] px-4 font-semibold tracking-[.08em] text-[#ffd9cf] hover:bg-[#7a2a22]"
             title="Detener el panel real"
             onClick={stopPanel}
           >
@@ -81,9 +79,7 @@ export function StageView() {
       <CollisionAlert />
       <TelemetryCard />
       <Transport />
-      <div
-        className={`pointer-events-none absolute bottom-[7px] left-6 text-10 text-[#697f98] compact:right-3 compact:left-3 compact:whitespace-nowrap ${controlsOpen ? 'compact:hidden' : ''}`}
-      >
+      <div className="pointer-events-none absolute bottom-[7px] left-6 text-10 text-[#697f98]">
         {TOUCH ? (
           <>
             {mode === 'cursor' ? 'Un dedo: mover la esfera · Dos: orbitar' : 'Un dedo: orbitar'}{' '}

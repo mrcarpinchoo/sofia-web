@@ -28,7 +28,7 @@ export function NotesDialog() {
 
   return (
     <dialog
-      className={`m-auto max-h-[85dvh] w-[min(680px,calc(100vw-32px))] rounded-2xl border border-[#435367] bg-[#171f2c] p-7 leading-[1.7] text-ink shadow-[0_30px_100px_#0008] backdrop:bg-[#0009] backdrop:backdrop-blur-[4px] compact:p-5 ${PROSE}`}
+      className={`m-auto max-h-[85dvh] w-[min(680px,calc(100vw-32px))] rounded-2xl border border-[#435367] bg-[#171f2c] p-7 leading-[1.7] text-ink shadow-[0_30px_100px_#0008] backdrop:bg-[#0009] backdrop:backdrop-blur-[4px] ${PROSE}`}
       ref={dialog}
       onClick={closeOnBackdrop}
       onClose={() => setOpen(false)}
@@ -103,26 +103,24 @@ export function NotesDialog() {
         así que no necesitas internet para usarlos.
       </p>
       <p>
-        Personas: el centro de hombros, o de hombros y caderas, se mapea a un objetivo en un plano a
-        la profundidad elegida. Es seguimiento visual 2D con amplitud ajustable, no medición métrica
-        de profundidad ni calibración extrínseca de cámara. Centrar en mi posición fija un origen
-        visual. Si aparecen varias personas, se intenta mantener la más cercana a la posición
-        anterior; no se identifica a las personas ni se garantiza conservar la misma al cruzarse.
-      </p>
-      <p>
         Gestos: los seis de <code>sofia-tracker</code>, con las mismas reglas, umbrales y
         suavizado (son una copia de su <code>gestures.py</code>). Índice → mirar arriba y luego
         abajo; V → dibujar un 8 horizontal; palma abierta → mirar a la derecha y luego a la
         izquierda; barrido a la izquierda o a la derecha → ola que cruza el panal en esa dirección;
-        agarre (de palma a puño) → sobresalto y regreso al reposo. Las posturas estáticas se
-        disparan al sostenerlas quietas 0.5 s. Cada gesto reproduce una vez el mismo movimiento que
+        agarre (de palma a puño) → sobresalto y regreso al reposo. Índice, V y palma se disparan al
+        sostener la postura con la mano quieta 0.5 s; el barrido, al deslizar la mano rápido hacia
+        un lado; el agarre, al pasar de la palma abierta al puño en menos de medio segundo. La
+        imagen se muestra en espejo, como en <code>sofia-tracker</code>. Con el panel real
+        conectado y el control en este navegador, los gestos y la mano también se envían al
+        Maestro. Cada gesto reproduce una vez el mismo movimiento que
         el Maestro (una copia de su coreografía), en el que cada unidad tiene su propio objetivo,
         registrado en el CSV; un gesto reconocido mientras otro se reproduce se ignora. Entre
         gestos, el centro de la palma se mapea como en el Maestro: los bordes de la imagen quedan a
         ±230 mm del centro del panal, a la profundidad elegida. Todas las trayectorias atraviesan la
         misma cinemática, restricciones y filtros. La señal de cámara se estabiliza con τ = 0.12 s
-        antes de los filtros articulares. Perder la detección retiene la pose y detiene los
-        filtros: 0.8 s en Personas y 0.5 s en Gestos, como el Maestro.
+        antes de los filtros articulares. Perder la mano durante 0.5 s retiene la pose y detiene
+        los filtros, como el Maestro. Es seguimiento visual 2D, no medición métrica de profundidad
+        ni calibración extrínseca de cámara.
       </p>
       <p>
         La cámara física no se ha probado en tu equipo. La iluminación, el encuadre, los permisos y
@@ -130,21 +128,13 @@ export function NotesDialog() {
         filtros y la representación siguen separados para futuras ampliaciones.
       </p>
       <p>
-        Referencias de implementación:{' '}
+        Referencia de implementación:{' '}
         <a
-          href="https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js"
+          href="https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/web_js"
           target="_blank"
           rel="noopener noreferrer"
         >
-          MediaPipe Pose Landmarker
-        </a>{' '}
-        y{' '}
-        <a
-          href="https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer/web_js"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Gesture Recognizer
+          MediaPipe Hand Landmarker
         </a>
         .
       </p>
@@ -152,10 +142,7 @@ export function NotesDialog() {
       <p>
         Material proporcionado: Modelado cinemático, pp. 9–13; Aplicación de Filtros; Arquitectura y
         Desarrollo SOFIA; planos Sofia003-E001-04 y código SOFIA_Asignación1. La exportación contiene
-        datos simulados, hasta los últimos 5 minutos a 10 Hz. Grabar página solicita seleccionar esta
-        pestaña para registrar todo lo visible: controles, escena y cámara con puntos. El contenido
-        que quede fuera de pantalla no se graba; desplázate por los controles para mostrarlo. No se
-        graba audio. La cámara permanece fijada abajo a la izquierda mientras está activa.
+        datos simulados, hasta los últimos 5 minutos a 10 Hz.
       </p>
     </dialog>
   );

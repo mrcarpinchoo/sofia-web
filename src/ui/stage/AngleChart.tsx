@@ -83,7 +83,7 @@ export function AngleChart({ telemetry }: { telemetry: Telemetry }) {
   return (
     <canvas
       ref={canvas}
-      className="mt-4 block h-21 w-full wide:h-26.25 short:h-11.25 compact:mt-2 compact:h-15"
+      className="mt-4 block h-21 w-full wide:h-26.25 low:h-11.25"
       aria-label="Gráfica de ángulos solicitados y filtrados de la unidad seleccionada"
     />
   );

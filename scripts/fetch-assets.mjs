@@ -1,7 +1,7 @@
 // Puts everything MediaPipe needs under public/mediapipe, so the camera works
 // without internet (the SOFIA-Maestro Wi-Fi network has none).
 //
-// Runs on `pnpm install`. The wasm comes from node_modules; the two models are
+// Runs on `pnpm install`. The wasm comes from node_modules; the hand model is
 // downloaded once and skipped afterwards.
 
 import { cp, mkdir, rename, stat, writeFile } from 'node:fs/promises';
@@ -12,8 +12,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const target = join(root, 'public', 'mediapipe');
 
 const MODELS = {
-  'pose_landmarker_lite.task':
-    'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
   // The same hand model as sofia-tracker.
   'hand_landmarker.task':
     'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
@@ -47,6 +45,6 @@ try {
   await Promise.all(Object.entries(MODELS).map(([name, url]) => download(name, url)));
 } catch (error) {
   // Everything but the camera still works, so don't fail the install.
-  console.warn(`Could not download the detection models: ${error.message}`);
+  console.warn(`Could not download the hand model: ${error.message}`);
   console.warn('The camera won\'t work until you run `node scripts/fetch-assets.mjs` with internet.');
 }

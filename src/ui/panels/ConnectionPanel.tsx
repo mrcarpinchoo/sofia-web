@@ -33,8 +33,6 @@ const MODE_LABELS: Record<MaestroMode, string> = {
   MANUAL: 'Ángulos manuales',
 };
 
-const HTTPS = window.location.protocol === 'https:';
-
 function controllerLabel(status: MaestroStatus) {
   if (status.isController) return 'Este navegador';
   if (status.controller === 'udp') return 'sofia-tracker (PC)';
@@ -138,12 +136,6 @@ export function ConnectionPanel() {
           <code>sofia-maestro</code>). Mientras haya enlace, la escena 3D muestra el panel real.
         </Hint>
       )}
-      {HTTPS && (
-        <Hint className="text-[#ffbd88]">
-          Esta página usa HTTPS y el navegador bloquea la conexión al Maestro (<code>ws://</code>).
-          Ábrela con <code>pnpm dev</code> en <code>http://localhost</code>.
-        </Hint>
-      )}
 
       <form
         onSubmit={(event) => {
@@ -158,7 +150,7 @@ export function ConnectionPanel() {
         <div className="flex gap-2">
           <input
             id="maestroHost"
-            className="min-w-0 flex-1 rounded-[7px] border border-line bg-control px-2.5 py-2 font-mono text-14 disabled:opacity-60 compact:min-h-11 compact:text-16"
+            className="min-w-0 flex-1 rounded-[7px] border border-line bg-control px-2.5 py-2 font-mono text-14 disabled:opacity-60"
             value={host}
             disabled={linked}
             spellCheck={false}

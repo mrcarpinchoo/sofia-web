@@ -16,7 +16,7 @@ const MODE_HINTS: Record<TargetMode, string> = {
   auto: 'Los paneles siguen la esfera roja.',
   cursor: 'Mueve el cursor sobre la escena. La esfera se mueve en el plano de profundidad elegido.',
   camera:
-    'Activa la cámara en el apartado 04. Personas sigue tu cuerpo; Gestos sigue la mano y reproduce cada gesto una vez.',
+    'Activa la cámara en el apartado 04. El panal sigue tu mano y reproduce cada gesto una vez.',
 };
 
 export function TargetPanel() {
@@ -28,12 +28,12 @@ export function TargetPanel() {
   const setPath = useLab((s) => s.setPath);
   const setSpeed = useLab((s) => s.setSpeed);
   const setDepth = useLab((s) => s.setDepth);
-  const showTab = useLab((s) => s.showTab);
+  const setControlsOpen = useLab((s) => s.setControlsOpen);
 
   function changeMode(next: TargetMode) {
     setMode(next);
     if (next === 'camera') {
-      showTab('camera');
+      setControlsOpen(true);
       document.getElementById('cameraSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
